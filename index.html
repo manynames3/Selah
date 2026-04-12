@@ -7,199 +7,147 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-/* ═══════════════════════════════
-   TOKENS
-═══════════════════════════════ */
 :root {
-  --bg:#1c1108; --wood-mid:#2e1e0e; --amber:#e8a832;
-  --amber-dim:#a06c1a; --warm-white:#fdf3e0;
-  --off-white:#f5e8c8; --readable:#ffe8b0;
+  --bg:#1c1108; --wood-mid:#2e1e0e;
+  --amber:#e8a832; --amber-dim:#a06c1a;
+  --warm-white:#fdf3e0; --off-white:#f5e8c8; --readable:#ffe8b0;
   --muted:rgba(253,243,224,0.58); --border:rgba(232,168,50,0.22);
   --danger:#e85432;
-  /* dynamic color — overridden by album art */
   --dyn-r:232; --dyn-g:168; --dyn-b:50;
-  /* time-of-day glow intensities */
-  --tod-top-alpha:0.22; --tod-tint:255,180,60;
-  --tod-bot-alpha:0.18; --tod-bot-tint:200,120,30;
 }
-
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
 body{background:var(--bg);color:var(--warm-white);font-family:'Nunito',sans-serif;font-weight:400;min-height:100vh;overflow-x:hidden;position:relative;}
-
-/* layered room bg */
-.room-bg{position:fixed;inset:0;z-index:0;pointer-events:none;transition:background 3s ease;}
-
-/* wood grain */
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 60% 40% at 50% -5%,rgba(255,180,60,.22) 0%,transparent 70%),
+    radial-gradient(ellipse 40% 60% at 92% 85%,rgba(200,120,30,.18) 0%,transparent 55%),
+    radial-gradient(ellipse 80% 80% at 50% 50%,rgba(42,26,8,.3) 0%,rgba(15,9,2,.85) 100%);}
 body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.65;
-  background-image:
-    repeating-linear-gradient(180deg,transparent 0,transparent 58px,rgba(0,0,0,.18) 58px,rgba(0,0,0,.18) 60px,transparent 60px,transparent 118px,rgba(255,160,60,.04) 118px,rgba(255,160,60,.04) 120px),
-    repeating-linear-gradient(92deg,transparent 0,transparent 120px,rgba(0,0,0,.08) 120px,rgba(0,0,0,.08) 122px,transparent 122px,transparent 280px,rgba(255,140,40,.03) 280px,rgba(255,140,40,.03) 282px);}
+  background-image:repeating-linear-gradient(180deg,transparent 0,transparent 58px,rgba(0,0,0,.18) 58px,rgba(0,0,0,.18) 60px,transparent 60px,transparent 118px,rgba(255,160,60,.04) 118px,rgba(255,160,60,.04) 120px),
+    repeating-linear-gradient(92deg,transparent 0,transparent 120px,rgba(0,0,0,.08) 120px,rgba(0,0,0,.08) 122px);}
+.grain{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.4;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");}
+.room-bg{position:fixed;inset:0;z-index:0;pointer-events:none;transition:background 3s ease;}
+.shelf-bg{position:fixed;bottom:0;left:0;right:0;height:60px;z-index:1;pointer-events:none;display:flex;align-items:flex-end;gap:3px;padding:0 3vw;opacity:.2;}
+.sr{width:42px;height:42px;border-radius:50%;background:#080706;flex-shrink:0;}
+.sr::before{content:'';display:block;width:38%;height:38%;border-radius:50%;background:#121008;margin:31% auto;}
+.slv{flex-shrink:0;width:40px;border-radius:2px 2px 0 0;}
 
-/* grain */
-.grain{position:fixed;inset:0;z-index:2;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");opacity:.45;}
+/* CANDLE */
+.candle-wrap{position:fixed;bottom:3.5rem;right:2rem;z-index:3;pointer-events:none;display:flex;flex-direction:column;align-items:center;}
+.candle-flame{width:12px;height:18px;position:relative;margin-bottom:-1px;}
+.candle-flame::before{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:10px;height:16px;background:radial-gradient(ellipse at 50% 80%,#fff8e1 0%,#ffcc44 40%,#ff8800 70%,transparent 100%);border-radius:50% 50% 35% 35%;animation:flicker 1.8s ease-in-out infinite;filter:blur(.5px);}
+.candle-glow{position:absolute;width:70px;height:70px;border-radius:50%;background:radial-gradient(circle,rgba(255,160,40,.22) 0%,transparent 70%);top:-25px;left:50%;transform:translateX(-50%);animation:glowPulse 1.8s ease-in-out infinite;}
+.candle-body{width:10px;height:36px;background:linear-gradient(to bottom,#e8d8b0,#c8b888,#a89858);border-radius:2px 2px 1px 1px;}
+@keyframes flicker{0%,100%{transform:translateX(-50%) scaleX(1) rotate(-1deg);}25%{transform:translateX(-50%) scaleX(.9) rotate(1.5deg);}50%{transform:translateX(-50%) scaleX(1.05) rotate(-2deg);}}
+@keyframes glowPulse{0%,100%{opacity:.8;}50%{opacity:.4;}}
 
-/* record shelf silhouette */
-.shelf-bg{position:fixed;bottom:0;left:0;right:0;height:70px;z-index:1;pointer-events:none;display:flex;align-items:flex-end;gap:3px;padding:0 3vw;opacity:.2;}
-.sr{width:44px;height:44px;border-radius:50%;background:#080706;flex-shrink:0;box-shadow:inset 0 0 0 3px #151310;position:relative;}
-.sr::before{content:'';position:absolute;inset:30%;border-radius:50%;background:#121008;}
-.slv{flex-shrink:0;width:42px;border-radius:2px 2px 0 0;}
-
-/* ═══ CANDLE ═══ */
-.candle-wrap{position:fixed;bottom:4rem;right:2rem;z-index:3;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:0;}
-.candle-flame{width:12px;height:18px;position:relative;margin-bottom:-2px;}
-.candle-flame::before{
-  content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);
-  width:10px;height:16px;
-  background:radial-gradient(ellipse at 50% 80%,#fff8e1 0%,#ffcc44 40%,#ff8800 70%,transparent 100%);
-  border-radius:50% 50% 35% 35%;
-  animation:flicker 1.8s ease-in-out infinite;
-  filter:blur(.5px);
-}
-.candle-flame::after{
-  content:'';position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
-  width:6px;height:8px;
-  background:radial-gradient(ellipse,rgba(255,255,255,.9) 0%,rgba(255,220,80,.7) 60%,transparent 100%);
-  border-radius:50%;
-  animation:flickerCore 1.8s ease-in-out infinite;
-  filter:blur(.3px);
-}
-.candle-body{width:10px;height:38px;background:linear-gradient(to bottom,#e8d8b0,#c8b888,#a89858);border-radius:2px 2px 1px 1px;position:relative;overflow:hidden;}
-.candle-body::after{content:'';position:absolute;top:0;right:2px;bottom:0;width:2px;background:rgba(255,255,255,.15);border-radius:1px;}
-.candle-glow{position:absolute;width:80px;height:80px;border-radius:50%;background:radial-gradient(circle,rgba(255,160,40,.25) 0%,transparent 70%);top:-30px;left:50%;transform:translateX(-50%);animation:glowPulse 1.8s ease-in-out infinite;}
-@keyframes flicker{0%,100%{transform:translateX(-50%) scaleX(1) scaleY(1) rotate(-1deg);}25%{transform:translateX(-50%) scaleX(.92) scaleY(1.05) rotate(1.5deg);}50%{transform:translateX(-50%) scaleX(1.04) scaleY(.96) rotate(-2deg);}75%{transform:translateX(-50%) scaleX(.94) scaleY(1.04) rotate(1deg);}}
-@keyframes flickerCore{0%,100%{opacity:.9;transform:translateX(-50%) scale(1);}50%{opacity:.7;transform:translateX(-50%) scale(.85);}}
-@keyframes glowPulse{0%,100%{opacity:.8;transform:translateX(-50%) scale(1);}50%{opacity:.5;transform:translateX(-50%) scale(.85);}}
-
-/* ═══ HEADER ═══ */
+/* HEADER */
 header{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:1.4rem 2.5rem;background:rgba(12,7,2,.65);border-bottom:1px solid var(--border);backdrop-filter:blur(8px);}
 .logo-wrap{display:flex;align-items:center;gap:.9rem;}
 .logo-glyph{width:34px;height:34px;border:1.5px solid var(--amber);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--amber);font-size:.9rem;flex-shrink:0;}
 .logo-name{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.12em;color:var(--warm-white);line-height:1;}
-.logo-sub{font-family:'Nunito',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.18em;color:var(--amber);text-transform:uppercase;margin-top:.1rem;}
-/* time of day greeting */
+.logo-sub{font-size:.68rem;font-weight:700;letter-spacing:.18em;color:var(--amber);text-transform:uppercase;margin-top:.1rem;}
 .tod-greeting{font-family:'Libre Baskerville',serif;font-style:italic;font-size:.78rem;color:var(--muted);margin-left:auto;padding-right:1.5rem;display:none;}
 @media(min-width:600px){.tod-greeting{display:block;}}
 .header-right{display:flex;align-items:center;gap:.75rem;}
-.admin-badge{display:none;align-items:center;gap:.4rem;font-family:'Nunito',sans-serif;font-size:.68rem;font-weight:700;color:var(--amber);letter-spacing:.08em;}
+.admin-badge{display:none;align-items:center;gap:.4rem;font-size:.68rem;font-weight:700;color:var(--amber);letter-spacing:.08em;}
 .admin-badge.show{display:flex;}
 .admin-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);animation:npulse 2s ease infinite;}
 .header-nav{display:flex;gap:.3rem;}
 .hn-btn{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:.15em;padding:.45rem 1.3rem;background:transparent;border:1.5px solid transparent;color:var(--muted);cursor:pointer;transition:all .25s;}
 .hn-btn:hover,.hn-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(232,168,50,.07);}
 
-/* ═══ PAGE ═══ */
+/* PAGE */
 .page-wrap{position:relative;z-index:10;max-width:1100px;margin:0 auto;padding:0 1.5rem 7rem;}
 .view{display:none;}
 .view.active{display:block;animation:fadeUp .5s cubic-bezier(.22,1,.36,1) both;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
-.config-alert{margin:1.5rem 0 0;background:rgba(232,168,50,.07);border:1.5px solid rgba(232,168,50,.28);padding:1.1rem 1.4rem;font-size:.82rem;font-weight:600;color:var(--readable);line-height:1.7;}
-.config-alert strong{color:var(--amber);}
-.config-alert code{background:rgba(0,0,0,.4);padding:.1rem .4rem;font-size:.74rem;font-family:monospace;border-radius:2px;}
 
-/* ═══ HERO ═══ */
+/* HERO */
 .hero-player{display:grid;grid-template-columns:240px 1fr;gap:2.5rem;padding:1.2rem 0 1rem;align-items:center;}
 @media(max-width:800px){.hero-player{grid-template-columns:1fr;gap:1.5rem;}}
 
-/* ═══ TURNTABLE ═══ */
+/* TURNTABLE */
 .tt-scene{display:flex;justify-content:center;align-items:center;position:relative;padding:1rem 1rem 1.8rem;}
-
-/* circular visualizer canvas — sits behind plinth */
-#vizCanvas{position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);pointer-events:none;z-index:1;transition:opacity .5s;}
-
-.tt-plinth{position:relative;padding:12px;background:linear-gradient(145deg,#3a2410,#1e1006,#2a1808);border-radius:12px;box-shadow:0 6px 28px rgba(0,0,0,.85),0 2px 0 rgba(255,180,80,.1) inset,0 -2px 0 rgba(0,0,0,.5) inset;z-index:2;transition:box-shadow .8s;}
-.tt-plinth::before{content:'';position:absolute;inset:0;border-radius:12px;background:repeating-linear-gradient(88deg,transparent 0,transparent 8px,rgba(255,130,40,.025) 8px,rgba(255,130,40,.025) 9px);pointer-events:none;}
+#vizCanvas{position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);pointer-events:none;z-index:1;}
+.tt-plinth{position:relative;padding:12px;background:linear-gradient(145deg,#3a2410,#1e1006,#2a1808);border-radius:12px;box-shadow:0 6px 28px rgba(0,0,0,.85),0 2px 0 rgba(255,180,80,.1) inset;z-index:2;transition:box-shadow .8s;}
 .tt-base{width:192px;height:192px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#2a2218,#0d0b08);box-shadow:0 0 0 5px #181410,0 0 0 7px #221e18,0 10px 30px rgba(0,0,0,.9),inset 0 2px 4px rgba(255,200,100,.06);position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:box-shadow .3s;}
-.tt-base:hover{box-shadow:0 0 0 5px #181410,0 0 0 7px #221e18,0 10px 30px rgba(0,0,0,.9),0 0 40px rgba(var(--dyn-r),var(--dyn-g),var(--dyn-b),.18),inset 0 2px 4px rgba(255,200,100,.06);}
 .vinyl-grooves{position:absolute;inset:0;border-radius:50%;background:repeating-radial-gradient(circle at 50% 50%,transparent 0,transparent 4px,rgba(255,255,255,.012) 4px,rgba(255,255,255,.012) 5px);}
 .vinyl-disc{width:178px;height:178px;border-radius:50%;position:absolute;background:conic-gradient(from 0deg,#100f0c 0deg,#1e1b16 22deg,#100f0c 44deg,#1a1714 66deg,#0e0d0a 88deg,#1e1b16 110deg,#100f0c 132deg,#1a1714 154deg,#0e0d0a 176deg,#1e1b16 198deg,#100f0c 220deg,#1a1714 242deg,#0e0d0a 264deg,#1e1b16 286deg,#100f0c 308deg,#1a1714 330deg,#0e0d0a 352deg,#100f0c 360deg);animation:vinylSpin 2.6s linear infinite paused;}
 @keyframes vinylSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .is-playing .vinyl-disc{animation-play-state:running;}
-.art-center{width:76px;height:76px;border-radius:50%;position:absolute;overflow:hidden;cursor:pointer;z-index:5;box-shadow:0 0 0 2px rgba(232,168,50,.3),0 3px 14px rgba(0,0,0,.7);transition:transform .3s,box-shadow .35s;}
+.art-center{width:76px;height:76px;border-radius:50%;position:absolute;overflow:hidden;cursor:pointer;z-index:5;box-shadow:0 0 0 2px rgba(232,168,50,.3),0 3px 14px rgba(0,0,0,.7);transition:transform .3s,box-shadow .3s;}
 .art-center:hover{transform:scale(1.08);box-shadow:0 0 0 3px var(--amber),0 5px 22px rgba(0,0,0,.85);}
 .art-center img{width:100%;height:100%;object-fit:cover;border-radius:50%;}
 .art-ph{width:100%;height:100%;background:radial-gradient(circle at 40% 35%,#3a2818,#0e0c09);display:flex;align-items:center;justify-content:center;color:var(--amber-dim);font-size:1.4rem;}
-.spindle{width:7px;height:7px;border-radius:50%;position:absolute;z-index:6;background:radial-gradient(circle at 40% 35%,#6a6a6a,#1a1a1a);box-shadow:0 1px 3px rgba(0,0,0,.8);}
-/* tonearm */
+.spindle{width:7px;height:7px;border-radius:50%;position:absolute;z-index:6;background:radial-gradient(circle at 40% 35%,#6a6a6a,#1a1a1a);}
 .tonearm-wrap{position:absolute;top:-10px;right:-10px;width:64px;height:88px;pointer-events:none;z-index:7;}
-.tonearm-pivot{position:absolute;top:3px;right:6px;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#888,#2a2a2a);box-shadow:0 2px 5px rgba(0,0,0,.7);}
-.tonearm-arm{position:absolute;top:9px;right:10px;width:4px;height:70px;background:linear-gradient(to bottom,#999,#555);border-radius:3px;transform-origin:50% 6px;transform:rotate(-28deg);transition:transform 1.2s cubic-bezier(.4,0,.2,1);box-shadow:0 2px 6px rgba(0,0,0,.6);}
+.tonearm-pivot{position:absolute;top:3px;right:6px;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#888,#2a2a2a);}
+.tonearm-arm{position:absolute;top:9px;right:10px;width:4px;height:70px;background:linear-gradient(to bottom,#999,#555);border-radius:3px;transform-origin:50% 6px;transform:rotate(-28deg);transition:transform 1.2s cubic-bezier(.4,0,.2,1);}
 .tonearm-arm::after{content:'';position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:7px;height:7px;background:#999;border-radius:1px;}
 .is-playing .tonearm-arm{transform:rotate(-12deg);}
-/* now playing */
 .np-row{position:absolute;bottom:-1.2rem;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.4rem;opacity:0;transition:opacity .4s;white-space:nowrap;}
 .is-playing .np-row{opacity:1;}
 .np-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);animation:npulse 1.1s ease infinite;}
 @keyframes npulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(.55);}}
 .np-label{font-family:'Bebas Neue',sans-serif;font-size:.75rem;letter-spacing:.22em;color:var(--amber);}
 
-/* ═══ PLAYER INFO ═══ */
+/* PLAYER INFO */
 .player-info{display:flex;flex-direction:column;gap:1rem;}
-.p-eyebrow{font-family:'Nunito',sans-serif;font-size:.68rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);}
+.p-eyebrow{font-size:.68rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);}
 .p-title{font-family:'Libre Baskerville',serif;font-size:clamp(1.4rem,3vw,2.1rem);font-weight:700;color:var(--warm-white);line-height:1.1;text-shadow:0 2px 12px rgba(0,0,0,.6);}
 .p-title em{font-style:italic;color:var(--amber);}
 .p-scripture{font-family:'Libre Baskerville',serif;font-style:italic;font-size:.85rem;color:var(--readable);line-height:1.5;}
 
-/* WAVEFORM SCRUBBER */
-.waveform-wrap{position:relative;cursor:pointer;user-select:none;}
-.waveform-container{width:100%;overflow:hidden;}
-.waveform-container svg{display:block;width:100%;height:52px;}
+/* WAVEFORM */
+.waveform-wrap{cursor:pointer;user-select:none;}
+.waveform-container svg{display:block;width:100%;}
 .waveform-time{display:flex;justify-content:space-between;font-size:.72rem;font-weight:700;color:var(--readable);margin-top:.4rem;letter-spacing:.06em;}
 
 /* CONTROLS */
 .ctrl-row{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;}
 .ctrl{background:none;border:none;cursor:pointer;color:var(--readable);font-size:1.05rem;transition:color .2s;padding:.2rem;}
 .ctrl:hover{color:var(--warm-white);}
-.play-btn{width:52px;height:52px;border-radius:50%;background:var(--amber);color:#1c1108;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.05rem;box-shadow:0 4px 20px rgba(232,168,50,.4),0 1px 0 rgba(255,220,120,.3) inset;transition:all .2s;flex-shrink:0;}
-.play-btn:hover{transform:scale(1.07);box-shadow:0 6px 28px rgba(232,168,50,.55);}
-/* loop button */
+.play-btn{width:52px;height:52px;border-radius:50%;background:var(--amber);color:#1c1108;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.05rem;box-shadow:0 4px 20px rgba(232,168,50,.4);transition:all .2s;flex-shrink:0;}
+.play-btn:hover{transform:scale(1.07);}
 .loop-btn{background:none;border:1.5px solid rgba(232,168,50,.25);width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;font-size:.78rem;transition:all .2s;flex-shrink:0;}
 .loop-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(232,168,50,.1);}
-.loop-btn:hover{border-color:var(--amber);color:var(--amber);}
-/* speed pills */
 .speed-group{display:flex;gap:2px;margin-left:auto;}
 .spd{font-family:'Bebas Neue',sans-serif;font-size:.75rem;letter-spacing:.1em;padding:.28rem .55rem;background:transparent;border:1px solid rgba(232,168,50,.18);color:var(--muted);cursor:pointer;border-radius:2px;transition:all .2s;}
 .spd:hover{border-color:rgba(232,168,50,.5);color:var(--readable);}
 .spd.active{background:rgba(232,168,50,.12);border-color:var(--amber);color:var(--amber);}
-/* lyrics pill */
 .lyrics-pill{font-family:'Bebas Neue',sans-serif;font-size:.88rem;letter-spacing:.18em;padding:.42rem 1rem;background:transparent;border:1.5px solid rgba(232,168,50,.3);color:var(--amber);cursor:pointer;transition:all .2s;border-radius:2px;white-space:nowrap;}
-.lyrics-pill:hover{background:rgba(232,168,50,.1);border-color:var(--amber);}
+.lyrics-pill:hover{background:rgba(232,168,50,.1);}
 
-/* ═══ SECTION DIVIDER ═══ */
+/* DIVIDER */
 .s-div{display:flex;align-items:center;gap:1.5rem;margin:.6rem 0 1rem;}
 .s-div::before,.s-div::after{content:'';flex:1;height:1px;background:linear-gradient(to right,transparent,rgba(232,168,50,.25));}
 .s-div::after{background:linear-gradient(to left,transparent,rgba(232,168,50,.25));}
 .s-div span{font-family:'Bebas Neue',sans-serif;font-size:.9rem;letter-spacing:.28em;color:var(--amber);white-space:nowrap;}
 
-/* ═══ ARCHIVE LIST ═══ */
+/* ARCHIVE LIST */
 .archive-grid{display:flex;flex-direction:column;gap:1px;background:rgba(0,0,0,.4);}
-.a-card{background:var(--wood-mid);cursor:pointer;position:relative;overflow:hidden;
-  display:grid;grid-template-columns:56px 1fr auto;align-items:center;gap:1rem;
-  padding:.7rem 1rem;transition:background .2s;}
-.a-card:hover{background:#3a2510;z-index:2;}
+.a-card{background:var(--wood-mid);cursor:pointer;position:relative;overflow:hidden;display:grid;grid-template-columns:56px 1fr auto;align-items:center;gap:1rem;padding:.7rem 1rem;transition:background .2s;}
+.a-card:hover{background:#3a2510;}
 .a-card:hover .a-play,.a-card:hover .a-delete{opacity:1;}
-/* thumbnail */
 .a-thumb{width:42px;height:42px;border-radius:50%;overflow:hidden;flex-shrink:0;box-shadow:0 0 0 1.5px rgba(232,168,50,.2);}
 .a-art{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;}
 .a-art-ph{width:100%;height:100%;background:radial-gradient(circle at 35% 35%,#3a2218,#0d0b08);display:flex;align-items:center;justify-content:center;color:var(--amber-dim);font-size:.9rem;}
 .a-info{min-width:0;}
 .a-title{font-family:'Libre Baskerville',serif;font-size:.88rem;font-weight:700;color:var(--warm-white);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.a-date{font-family:'Nunito',sans-serif;font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin-top:.1rem;}
+.a-date{font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin-top:.1rem;}
 .a-ref{font-size:.68rem;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .a-actions{display:flex;align-items:center;gap:.4rem;flex-shrink:0;}
 .a-play{width:28px;height:28px;border-radius:50%;background:rgba(232,168,50,.15);border:1.5px solid var(--amber);display:flex;align-items:center;justify-content:center;color:var(--amber);font-size:.5rem;opacity:0;transition:opacity .2s;}
 .a-delete{width:24px;height:24px;border-radius:50%;background:rgba(232,84,50,.15);border:1px solid rgba(232,84,50,.4);display:none;align-items:center;justify-content:center;color:#ff8060;font-size:.55rem;opacity:0;transition:opacity .2s;cursor:pointer;}
 .a-delete:hover{background:rgba(232,84,50,.35);}
 body.admin-mode .a-delete{display:flex;}
-
-/* playing indicator */
 .a-card.now-playing{background:rgba(232,168,50,.07);}
 .a-card.now-playing .a-thumb{box-shadow:0 0 0 2px var(--amber);}
 .a-card.now-playing .a-play{opacity:1;background:var(--amber);color:#1c1108;}
-.a-overlay{display:contents;}
 
-/* ═══ MODALS ═══ */
-/* lyrics */
+/* LYRICS MODAL */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:500;display:flex;align-items:center;justify-content:center;padding:2rem;pointer-events:none;transition:background .4s;}
 .modal-backdrop.open{background:rgba(0,0,0,.9);pointer-events:all;backdrop-filter:blur(14px);}
 .lyrics-modal{background:linear-gradient(160deg,#251808,#1a1006,#251808);border:1.5px solid rgba(232,168,50,.2);max-width:620px;width:100%;max-height:85vh;overflow-y:auto;position:relative;transform:scale(.9) translateY(28px);opacity:0;transition:all .42s cubic-bezier(.22,1,.36,1);scrollbar-width:thin;scrollbar-color:var(--amber-dim) transparent;box-shadow:0 24px 80px rgba(0,0,0,.8);}
@@ -208,8 +156,8 @@ body.admin-mode .a-delete{display:flex;}
 .modal-art-header img{width:100%;height:100%;object-fit:cover;filter:brightness(.6) saturate(1.1);}
 .modal-art-overlay{position:absolute;inset:0;background:linear-gradient(to top,#1a1006 0%,rgba(26,16,6,.25) 50%,transparent 100%);}
 .modal-title-block{position:absolute;bottom:1.5rem;left:1.5rem;right:3.5rem;}
-.modal-title-block .m-date{font-family:'Nunito',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);margin-bottom:.35rem;}
-.modal-title-block h2{font-family:'Libre Baskerville',serif;font-size:1.85rem;font-weight:700;color:var(--warm-white);line-height:1.1;text-shadow:0 2px 12px rgba(0,0,0,.8);}
+.modal-title-block .m-date{font-size:.7rem;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);margin-bottom:.35rem;}
+.modal-title-block h2{font-family:'Libre Baskerville',serif;font-size:1.85rem;font-weight:700;color:var(--warm-white);line-height:1.1;}
 .modal-title-block p{font-family:'Libre Baskerville',serif;font-style:italic;font-size:.9rem;color:var(--readable);margin-top:.3rem;}
 .modal-close{position:absolute;top:1rem;right:1rem;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.55);border:1.5px solid rgba(232,168,50,.3);color:var(--readable);cursor:pointer;font-size:.75rem;display:flex;align-items:center;justify-content:center;z-index:10;transition:all .2s;}
 .modal-close:hover{background:rgba(232,168,50,.2);color:var(--amber);}
@@ -217,7 +165,7 @@ body.admin-mode .a-delete{display:flex;}
 .lyrics-label{font-family:'Bebas Neue',sans-serif;font-size:.9rem;letter-spacing:.3em;color:var(--amber-dim);margin-bottom:1.2rem;padding-bottom:.75rem;border-bottom:1px solid rgba(232,168,50,.14);}
 .lyrics-body{font-family:'Libre Baskerville',serif;font-size:1.06rem;line-height:2;color:var(--off-white);white-space:pre-wrap;}
 
-/* delete */
+/* DELETE MODAL */
 .del-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:600;display:flex;align-items:center;justify-content:center;padding:2rem;pointer-events:none;transition:background .3s;}
 .del-modal-bg.open{background:rgba(0,0,0,.88);pointer-events:all;backdrop-filter:blur(10px);}
 .del-modal{background:linear-gradient(160deg,#2a1208,#1a0a04);border:1.5px solid rgba(232,84,50,.3);max-width:420px;width:100%;padding:2.5rem;transform:scale(.9) translateY(20px);opacity:0;transition:all .35s cubic-bezier(.22,1,.36,1);box-shadow:0 24px 80px rgba(0,0,0,.85);text-align:center;}
@@ -240,14 +188,14 @@ body.admin-mode .a-delete{display:flex;}
 .del-confirm.final{background:#e85432;color:#fff;}
 .del-confirm.final:hover{background:#c0432a;}
 
-/* ═══ ADMIN FORMS ═══ */
+/* ADMIN */
 .admin-wrap{max-width:560px;margin:3rem auto 0;}
 .admin-h{font-family:'Libre Baskerville',serif;font-size:2rem;font-weight:700;color:var(--warm-white);margin-bottom:.35rem;}
 .admin-sub{font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:2.5rem;}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
 @media(max-width:540px){.form-row{grid-template-columns:1fr;}}
 .field{margin-bottom:1.4rem;}
-.field label{display:block;font-family:'Nunito',sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--amber);margin-bottom:.5rem;}
+.field label{display:block;font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--amber);margin-bottom:.5rem;}
 .field input,.field textarea{width:100%;background:rgba(255,255,255,.04);border:1.5px solid rgba(232,168,50,.2);color:var(--warm-white);font-family:'Nunito',sans-serif;font-size:.9rem;font-weight:600;padding:.8rem 1rem;outline:none;transition:border .2s;}
 .field input:focus,.field textarea:focus{border-color:var(--amber);}
 .field textarea{resize:vertical;min-height:155px;line-height:1.8;}
@@ -262,7 +210,7 @@ body.admin-mode .a-delete{display:flex;}
 .gate-wrap{max-width:380px;margin:5rem auto;text-align:center;}
 .gate-wrap h2{font-family:'Libre Baskerville',serif;font-size:2.1rem;font-weight:700;color:var(--warm-white);margin-bottom:.4rem;}
 .gate-wrap p{font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:2rem;}
-.empty-state{text-align:center;padding:5rem 2rem;}
+.empty-state{text-align:center;padding:3rem 2rem;}
 .empty-state .g{font-size:2.5rem;margin-bottom:1rem;color:var(--amber-dim);}
 .empty-state p{font-family:'Libre Baskerville',serif;font-style:italic;font-size:1.1rem;color:var(--readable);}
 #toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(3rem);background:var(--amber);color:#1c1108;font-family:'Bebas Neue',sans-serif;font-size:.9rem;letter-spacing:.2em;padding:.65rem 2rem;z-index:9999;pointer-events:none;transition:transform .35s cubic-bezier(.22,1,.36,1);white-space:nowrap;box-shadow:0 4px 20px rgba(232,168,50,.4);}
@@ -270,21 +218,14 @@ body.admin-mode .a-delete{display:flex;}
 </style>
 </head>
 <body>
-
-<!-- room bg with dynamic color -->
 <div class="room-bg" id="roomBg"></div>
 <div class="grain"></div>
-
-<!-- record shelf -->
 <div class="shelf-bg" id="shelfBg"></div>
-
-<!-- candle -->
 <div class="candle-wrap">
   <div class="candle-flame"><div class="candle-glow"></div></div>
   <div class="candle-body"></div>
 </div>
 
-<!-- HEADER -->
 <header>
   <div class="logo-wrap">
     <div class="logo-glyph">✦</div>
@@ -304,21 +245,15 @@ body.admin-mode .a-delete{display:flex;}
 </header>
 
 <div class="page-wrap">
-  <div class="config-alert" id="configBanner">
-    <strong>⚙ Setup Required</strong> — Open this file, find the <code>&lt;script&gt;</code> section, replace <code>YOUR_SUPABASE_URL</code> and <code>YOUR_SUPABASE_ANON_KEY</code>. Full SQL guide in the HTML comments below.
-  </div>
-
   <!-- ARCHIVE -->
   <div id="view-archive" class="view active">
     <div class="hero-player">
-
-      <!-- TURNTABLE + VISUALIZER -->
       <div class="tt-scene" id="ttScene">
         <canvas id="vizCanvas" width="300" height="300"></canvas>
         <div class="tt-plinth" id="ttPlinth">
           <div class="tt-base" onclick="togglePlay()">
             <div class="vinyl-grooves"></div>
-            <div class="vinyl-disc" id="vinylDisc"></div>
+            <div class="vinyl-disc"></div>
             <div class="art-center" id="artCenter" onclick="openModal(event)">
               <div class="art-ph" id="artPh">✦</div>
               <img id="artImg" style="display:none" crossorigin="anonymous"/>
@@ -336,33 +271,25 @@ body.admin-mode .a-delete{display:flex;}
         </div>
       </div>
 
-      <!-- PLAYER INFO -->
       <div class="player-info">
         <div>
           <div class="p-eyebrow" id="pEyebrow">Select a recording below</div>
           <h2 class="p-title" id="pTitle">Songs from the <em>Secret Place</em></h2>
           <p class="p-scripture" id="pScripture">One song. One scripture. Every day.</p>
         </div>
-
-        <!-- WAVEFORM SCRUBBER -->
-        <div class="waveform-wrap" id="waveformWrap" onclick="seekFromWaveform(event)">
-          <div class="waveform-container" id="waveformContainer"></div>
-          <div class="waveform-time">
-            <span id="tNow">0:00</span>
-            <span id="tTot">0:00</span>
-          </div>
+        <div class="waveform-wrap" onclick="seekFromWaveform(event)">
+          <div id="waveformContainer"></div>
+          <div class="waveform-time"><span id="tNow">0:00</span><span id="tTot">0:00</span></div>
         </div>
-
-        <!-- CONTROLS -->
         <div class="ctrl-row">
-          <button class="ctrl" onclick="skipBack()" title="Restart">⟪</button>
+          <button class="ctrl" onclick="skipBack()">⟪</button>
           <button class="play-btn" id="playBtn" onclick="togglePlay()">▶</button>
-          <button class="ctrl" onclick="skipFwd()" title="+15s">⟫</button>
-          <button class="loop-btn" id="loopBtn" onclick="toggleLoop()" title="Loop">⟳</button>
+          <button class="ctrl" onclick="skipFwd()">⟫</button>
+          <button class="loop-btn" id="loopBtn" onclick="toggleLoop()">⟳</button>
           <button class="lyrics-pill" onclick="openModal()">Lyrics ↗</button>
           <div class="speed-group">
             <button class="spd" onclick="setSpeed(.75)">0.75×</button>
-            <button class="spd active" id="spd1" onclick="setSpeed(1)">1×</button>
+            <button class="spd active" onclick="setSpeed(1)">1×</button>
             <button class="spd" onclick="setSpeed(1.25)">1.25×</button>
             <button class="spd" onclick="setSpeed(1.5)">1.5×</button>
           </div>
@@ -372,9 +299,7 @@ body.admin-mode .a-delete{display:flex;}
 
     <div class="s-div"><span>All Recordings — Recent First</span></div>
     <div class="archive-grid" id="archiveGrid">
-      <div class="empty-state" style="grid-column:1/-1">
-        <div class="g">✦</div><p>No entries yet. Upload your first song.</p>
-      </div>
+      <div class="empty-state"><div class="g">✦</div><p>No entries yet.</p></div>
     </div>
   </div>
 
@@ -382,9 +307,8 @@ body.admin-mode .a-delete{display:flex;}
   <div id="view-admin-gate" class="view" style="display:none">
     <div class="gate-wrap">
       <h2>Admin Access</h2>
-      <p>Enter your password to enter the studio.</p>
-      <div class="field">
-        <label>Password</label>
+      <p>Enter your password to continue.</p>
+      <div class="field"><label>Password</label>
         <input type="password" id="gatePw" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkGate()"/>
       </div>
       <button class="submit-btn" onclick="checkGate()">Enter Studio</button>
@@ -400,9 +324,7 @@ body.admin-mode .a-delete{display:flex;}
         <div class="field"><label>Song Title</label><input type="text" id="uTitle" placeholder="e.g. Still Waters"/></div>
         <div class="field"><label>Entry Date</label><input type="date" id="uDate"/></div>
       </div>
-      <div class="field"><label>Scripture Reference</label>
-        <input type="text" id="uScripture" placeholder="e.g. Psalm 23:2"/>
-      </div>
+      <div class="field"><label>Scripture Reference</label><input type="text" id="uScripture" placeholder="e.g. Psalm 23:2"/></div>
       <div class="field"><label>MP3 / Audio File</label><input type="file" id="uAudio" accept="audio/*"/></div>
       <div class="field">
         <label>Album Artwork (optional)</label>
@@ -410,7 +332,7 @@ body.admin-mode .a-delete{display:flex;}
         <div class="art-preview" id="artPreview"><img id="artPreviewImg"/></div>
       </div>
       <div class="field"><label>Lyrics</label>
-        <textarea id="uLyrics" placeholder="Paste lyrics here...&#10;&#10;[Verse 1]&#10;...&#10;&#10;[Chorus]&#10;..."></textarea>
+        <textarea id="uLyrics" placeholder="Paste lyrics here..."></textarea>
       </div>
       <button class="submit-btn" id="submitBtn" onclick="handleUpload()">Publish Song</button>
       <p class="up-status" id="upStatus"></p>
@@ -443,7 +365,7 @@ body.admin-mode .a-delete{display:flex;}
   <div class="del-modal">
     <div class="del-icon">🗑</div>
     <div class="del-title" id="delTitle">Delete This Recording?</div>
-    <div class="del-sub" id="delSub">This permanently removes the song, audio, and lyrics. Cannot be undone.</div>
+    <div class="del-sub" id="delSub">This permanently removes the song, audio, and lyrics.</div>
     <span class="del-song-name" id="delSongName"></span>
     <div class="del-steps">
       <div class="del-step active" id="dStep1">1</div>
@@ -465,22 +387,104 @@ body.admin-mode .a-delete{display:flex;}
 <div id="toast"></div>
 
 <script>
-// ╔══════════════════════════════════════╗
-// ║  CONFIGURATION — EDIT THESE VALUES  ║
-// ╚══════════════════════════════════════╝
+// ── CONFIG ──
 const SUPABASE_URL   = 'https://owgryjlboefkchgibrqm.supabase.co';
 const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93Z3J5amxib2Vma2NoZ2licnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MjE3MjAsImV4cCI6MjA5MTQ5NzcyMH0.DO5WtuShQ2YpPF4ZzHZ9y3wcbd4XKHBH390v9hEtMYM';
 const ADMIN_PASSWORD = 'grace2024';
 const BUCKET_AUDIO   = 'devotional-audio';
 const BUCKET_ART     = 'devotional-art';
-// ═══════════════════════════════════════
 
-const configured = SUPABASE_URL !== 'YOUR_SUPABASE_URL';
-let sb, entries=[], current=null, playing=false, isAdmin=false, pendingDeleteId=null;
+// ── STATE ──
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 const audio = document.getElementById('audioEl');
+let entries = [], current = null, playing = false, isAdmin = false, pendingDeleteId = null, loopOn = false;
+let audioCtx, analyser, audioSrc, audioInited = false;
+let waveformBars = [], waveformW = 0;
 
-// ── Web Audio ──
-let audioCtx, analyser, audioSource, audioInited=false;
+// ── INIT ──
+document.getElementById('uDate').valueAsDate = new Date();
+buildShelf();
+applyTimeOfDay();
+drawViz();
+loadEntries();
+
+// ── TIME OF DAY ──
+function applyTimeOfDay() {
+  var h = new Date().getHours();
+  var tint, alpha, greeting;
+  if (h >= 5 && h < 8)       { tint='255,180,130'; alpha=.18; greeting='Good morning. A new day of praise.'; }
+  else if (h >= 8 && h < 17) { tint='255,200,110'; alpha=.14; greeting='Songs for the afternoon quiet.'; }
+  else if (h >= 17 && h < 20){ tint='255,140,40';  alpha=.28; greeting='Golden hour. Come and rest.'; }
+  else                        { tint='255,170,55';  alpha=.22; greeting='Still of the night. Just you and Him.'; }
+  document.getElementById('roomBg').style.background =
+    'radial-gradient(ellipse 60% 40% at 50% -5%,rgba('+tint+','+alpha+') 0%,transparent 70%),' +
+    'radial-gradient(ellipse 80% 80% at 50% 50%,rgba(42,26,8,.3) 0%,rgba(12,7,2,.88) 100%)';
+  document.getElementById('todGreeting').textContent = greeting;
+}
+
+// ── SHELF ──
+function buildShelf() {
+  var colors = ['#8b2020','#1a3a6b','#2a2a2a','#2d5a1b','#5a2d6b','#6b4a1a','#1a4a4a','#7a3a1a','#4a1a2a','#1a5a2a'];
+  var html = '', ci = 0;
+  for (var i = 0; i < 32; i++) {
+    if (i % 3 === 1) { html += '<div class="sr"></div>'; }
+    else { var h = 44 + Math.floor(Math.sin(i) * 8); html += '<div class="slv" style="height:'+h+'px;background:'+colors[ci%colors.length]+'"></div>'; ci++; }
+  }
+  document.getElementById('shelfBg').innerHTML = html;
+}
+
+// ── DYNAMIC COLOR ──
+function extractColor(imgEl) {
+  try {
+    var c = document.createElement('canvas'); c.width = 50; c.height = 50;
+    var ctx = c.getContext('2d'); ctx.drawImage(imgEl, 0, 0, 50, 50);
+    var d = ctx.getImageData(0, 0, 50, 50).data;
+    var br = 232, bg = 168, bb = 50, best = 0;
+    for (var i = 0; i < d.length; i += 8) {
+      var r=d[i], g=d[i+1], b=d[i+2];
+      var mx=Math.max(r,g,b), sat=mx>0?(mx-Math.min(r,g,b))/mx:0;
+      var score = sat * (mx/255);
+      if (score > best && mx/255 > .25 && mx/255 < .92) { best=score; br=r; bg=g; bb=b; }
+    }
+    document.documentElement.style.setProperty('--dyn-r', br);
+    document.documentElement.style.setProperty('--dyn-g', bg);
+    document.documentElement.style.setProperty('--dyn-b', bb);
+    document.getElementById('ttPlinth').style.boxShadow =
+      '0 6px 28px rgba(0,0,0,.85),0 0 50px rgba('+br+','+bg+','+bb+',.15),0 2px 0 rgba(255,180,80,.1) inset';
+  } catch(e) {}
+}
+
+// ── VISUALIZER ──
+var vizCanvas = document.getElementById('vizCanvas');
+var vizCtx = vizCanvas.getContext('2d');
+function drawViz() {
+  requestAnimationFrame(drawViz);
+  vizCtx.clearRect(0, 0, 300, 300);
+  var cx=150, cy=150, innerR=113, bars=80;
+  var r = getComputedStyle(document.documentElement).getPropertyValue('--dyn-r').trim() || 232;
+  var g = getComputedStyle(document.documentElement).getPropertyValue('--dyn-g').trim() || 168;
+  var b = getComputedStyle(document.documentElement).getPropertyValue('--dyn-b').trim() || 50;
+  var freqData = null;
+  if (analyser) { freqData = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(freqData); }
+  for (var i = 0; i < bars; i++) {
+    var angle = (i/bars)*Math.PI*2 - Math.PI/2;
+    var val = 0;
+    if (freqData && playing) { val = freqData[Math.floor((i/bars)*freqData.length*.6)] / 255; }
+    var barH = playing ? val*55+2 : (Math.sin(Date.now()*.0008+i*.18)*.5+.5)*3+1;
+    var alpha = playing ? .1+val*.75 : .03+Math.sin(Date.now()*.001+i*.2)*.03;
+    var x1=cx+Math.cos(angle)*innerR, y1=cy+Math.sin(angle)*innerR;
+    var x2=cx+Math.cos(angle)*(innerR+barH), y2=cy+Math.sin(angle)*(innerR+barH);
+    var grad = vizCtx.createLinearGradient(x1,y1,x2,y2);
+    grad.addColorStop(0, 'rgba('+r+','+g+','+b+','+alpha*.4+')');
+    grad.addColorStop(1, 'rgba('+r+','+g+','+b+','+alpha+')');
+    vizCtx.strokeStyle = grad;
+    vizCtx.lineWidth = playing ? 2.5 : 1.5;
+    vizCtx.lineCap = 'round';
+    vizCtx.beginPath(); vizCtx.moveTo(x1,y1); vizCtx.lineTo(x2,y2); vizCtx.stroke();
+  }
+}
+
+// ── WEB AUDIO (attached after play succeeds) ──
 function tryInitAudio() {
   if (audioInited) { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); return; }
   try {
@@ -488,529 +492,295 @@ function tryInitAudio() {
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.8;
-    if (!audioSource) {
-      audioSource = audioCtx.createMediaElementSource(audio);
-      audioSource.connect(analyser);
-      analyser.connect(audioCtx.destination);
-    }
+    audioSrc = audioCtx.createMediaElementSource(audio);
+    audioSrc.connect(analyser);
+    analyser.connect(audioCtx.destination);
     audioInited = true;
   } catch(e) { console.warn('Visualizer unavailable:', e); }
 }
-  try {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.8;
-    audioSource = audioCtx.createMediaElementSource(audio);
-    audioSource.connect(analyser);
-    analyser.connect(audioCtx.destination);
-    audioInited = true;
-  } catch(e) {
-    console.warn('Web Audio init failed, playing without visualizer:', e);
+
+// ── WAVEFORM ──
+function hashStr(s) { var h=0; for(var i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;} return Math.abs(h); }
+function genWave(seed, n) {
+  var s = seed%99991||7;
+  var rng = function(){ s=(s*9301+49297)%233280; return s/233280; };
+  var out = [];
+  for(var i=0;i<n;i++){
+    var v = .25+Math.sin(i*.18)*.22+Math.sin(i*.05)*.15+rng()*.38;
+    out.push(Math.max(.06, Math.min(.98, v)));
   }
+  return out;
 }
-
-// ── Build shelf silhouette ──
-(()=>{
-  const shelf = document.getElementById('shelfBg');
-  const colors=['#8b2020','#1a3a6b','#2a2a2a','#2d5a1b','#3a1a08','#5a2d6b','#6b4a1a','#1a4a4a','#7a3a1a','#2a2a6b','#4a1a2a','#1a5a2a','#5a4a1a','#8b3a1a','#1a2a5a','#4a2a0a','#6b1a2a','#2a4a1a'];
-  let html='';
-  let ci=0;
-  for(let i=0;i<34;i++){
-    if(i%3===1){html+=`<div class="sr" style="flex-shrink:0"></div>`;}
-    else{const h=44+Math.floor(Math.sin(i)*8);html+=`<div class="slv" style="height:${h}px;background:${colors[ci%colors.length]}"></div>`;ci++;}
-  }
-  shelf.innerHTML=html;
-})();
-
-// ── Time of day ──
-function applyTimeOfDay() {
-  const h = new Date().getHours();
-  let tint, topAlpha, botTint, botAlpha, greeting;
-  if (h>=5&&h<8)  { tint='255,180,130'; topAlpha=.18; botTint='200,100,60'; botAlpha=.14; greeting='Good morning. A new day of praise.'; }
-  else if(h>=8&&h<17){ tint='255,200,110'; topAlpha=.14; botTint='180,140,60'; botAlpha=.1; greeting='Songs for the afternoon quiet.'; }
-  else if(h>=17&&h<20){ tint='255,140,40'; topAlpha=.28; botTint='220,80,20'; botAlpha=.2; greeting='Golden hour. Come and rest.'; }
-  else { tint='255,170,55'; topAlpha=.22; botTint='200,110,25'; botAlpha=.17; greeting='Still of the night. Just you and Him.'; }
-  document.getElementById('roomBg').style.background=
-    `radial-gradient(ellipse 60% 40% at 50% -5%,rgba(${tint},${topAlpha}) 0%,transparent 70%),`+
-    `radial-gradient(ellipse 40% 60% at 92% 85%,rgba(${botTint},${botAlpha}) 0%,transparent 55%),`+
-    `radial-gradient(ellipse 35% 45% at -5% 15%,rgba(${tint},.08) 0%,transparent 55%),`+
-    `radial-gradient(ellipse 80% 80% at 50% 50%,rgba(42,26,8,.3) 0%,rgba(12,7,2,.88) 100%)`;
-  document.getElementById('todGreeting').textContent = greeting;
-}
-applyTimeOfDay();
-
-// ── Dynamic color from album art ──
-function extractAndApplyColor(imgEl) {
-  try {
-    const c = document.createElement('canvas');
-    c.width=50; c.height=50;
-    const ctx=c.getContext('2d');
-    ctx.drawImage(imgEl,0,0,50,50);
-    const d=ctx.getImageData(0,0,50,50).data;
-    let bestR=232,bestG=168,bestB=50,bestScore=0;
-    for(let i=0;i<d.length;i+=8){
-      const r=d[i],g=d[i+1],b=d[i+2];
-      const mx=Math.max(r,g,b), mn=Math.min(r,g,b);
-      const sat=mx>0?(mx-mn)/mx:0;
-      const bright=mx/255;
-      const score=sat*bright;
-      if(score>bestScore&&bright>.25&&bright<.92){bestScore=score;bestR=r;bestG=g;bestB=b;}
-    }
-    const root=document.documentElement;
-    root.style.setProperty('--dyn-r',bestR);
-    root.style.setProperty('--dyn-g',bestG);
-    root.style.setProperty('--dyn-b',bestB);
-    // update plinth glow
-    document.getElementById('ttPlinth').style.boxShadow=
-      `0 8px 40px rgba(0,0,0,.85),0 0 60px rgba(${bestR},${bestG},${bestB},.12),0 2px 0 rgba(255,180,80,.1) inset,0 -2px 0 rgba(0,0,0,.5) inset`;
-  } catch(e) { /* CORS blocked — leave default */ }
-}
-
-// ── Circular visualizer ──
-const vizCanvas = document.getElementById('vizCanvas');
-const vizCtx = vizCanvas.getContext('2d');
-let vizRAF;
-
-function drawViz() {
-  vizRAF = requestAnimationFrame(drawViz);
-  vizCtx.clearRect(0,0,300,300);
-  const cx=150, cy=150;
-  const innerR=113; // just outside smaller vinyl disc
-  const bars=80;
-
-  if (!analyser) {
-    // idle shimmer
-    for(let i=0;i<bars;i++){
-      const angle=(i/bars)*Math.PI*2-Math.PI/2;
-      const shimmer=Math.sin(Date.now()*.001+i*.2)*.5+.5;
-      const barH=2+shimmer*4;
-      const x1=cx+Math.cos(angle)*innerR, y1=cy+Math.sin(angle)*innerR;
-      const x2=cx+Math.cos(angle)*(innerR+barH), y2=cy+Math.sin(angle)*(innerR+barH);
-      vizCtx.strokeStyle=`rgba(232,168,50,${0.04+shimmer*.06})`;
-      vizCtx.lineWidth=1.5;
-      vizCtx.beginPath(); vizCtx.moveTo(x1,y1); vizCtx.lineTo(x2,y2); vizCtx.stroke();
-    }
-    return;
-  }
-
-  const freqData=new Uint8Array(analyser.frequencyBinCount);
-  analyser.getByteFrequencyData(freqData);
-  const r=document.documentElement.style.getPropertyValue('--dyn-r')||232;
-  const g=document.documentElement.style.getPropertyValue('--dyn-g')||168;
-  const b=document.documentElement.style.getPropertyValue('--dyn-b')||50;
-
-  for(let i=0;i<bars;i++){
-    const angle=(i/bars)*Math.PI*2-Math.PI/2;
-    const freqIdx=Math.floor((i/bars)*freqData.length*.6);
-    const val=freqData[freqIdx]/255;
-    const barH=playing ? val*55+2 : (Math.sin(Date.now()*.0008+i*.18)*.5+.5)*3+1;
-    const alpha=playing ? .12+val*.75 : .04+Math.sin(Date.now()*.001+i*.2)*.5*.04;
-
-    const x1=cx+Math.cos(angle)*innerR, y1=cy+Math.sin(angle)*innerR;
-    const x2=cx+Math.cos(angle)*(innerR+barH), y2=cy+Math.sin(angle)*(innerR+barH);
-
-    // gradient glow
-    const grad=vizCtx.createLinearGradient(x1,y1,x2,y2);
-    grad.addColorStop(0,`rgba(${r},${g},${b},${alpha*.4})`);
-    grad.addColorStop(1,`rgba(${r},${g},${b},${alpha})`);
-    vizCtx.strokeStyle=grad;
-    vizCtx.lineWidth=playing?2.5:1.5;
-    vizCtx.lineCap='round';
-    vizCtx.beginPath(); vizCtx.moveTo(x1,y1); vizCtx.lineTo(x2,y2); vizCtx.stroke();
-  }
-}
-drawViz();
-
-// ── Waveform scrubber ──
-function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){h=Math.imul(31,h)+s.charCodeAt(i)|0;} return Math.abs(h); }
-
-function genWave(seed, n=90) {
-  let s=seed%99991||7;
-  const rng=()=>{ s=(s*9301+49297)%233280; return s/233280; };
-  return Array.from({length:n},(_,i)=>{
-    const base=.25, wave=Math.sin(i*.18)*.22, wave2=Math.sin(i*.05)*.15, noise=rng()*.38;
-    return Math.max(.06, Math.min(.98, base+wave+wave2+noise));
-  });
-}
-
-let waveformBars=[], waveformSvgW=0;
-
 function renderWaveform(entry) {
-  const container=document.getElementById('waveformContainer');
-  const n=90, barW=2.5, gap=1.2, H=52;
-  const seed=hashStr(entry.id||'default');
-  waveformBars=genWave(seed,n);
-  waveformSvgW=n*(barW+gap);
-
-  const dimRects=waveformBars.map((h,i)=>{
-    const bh=Math.max(4,h*H*.88);
-    const y=(H-bh)/2, x=i*(barW+gap);
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW}" height="${bh.toFixed(1)}" rx="1.2" fill="rgba(253,243,224,0.13)"/>`;
-  }).join('');
-
-  const litRects=waveformBars.map((h,i)=>{
-    const bh=Math.max(4,h*H*.88);
-    const y=(H-bh)/2, x=i*(barW+gap);
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW}" height="${bh.toFixed(1)}" rx="1.2" fill="rgba(232,168,50,0.9)"/>`;
-  }).join('');
-
-  container.innerHTML=`
-    <svg width="${waveformSvgW}" height="${H}" viewBox="0 0 ${waveformSvgW} ${H}" preserveAspectRatio="none" style="width:100%;height:${H}px">
-      <defs>
-        <clipPath id="wClip">
-          <rect id="wClipRect" x="0" y="0" width="0" height="${H}"/>
-        </clipPath>
-      </defs>
-      <g>${dimRects}</g>
-      <g clip-path="url(#wClip)">${litRects}</g>
-    </svg>`;
+  var n=90, bw=2.5, gap=1.2, H=52;
+  var seed = hashStr(entry.id||'x');
+  waveformBars = genWave(seed, n);
+  waveformW = n*(bw+gap);
+  var dim='', lit='';
+  for(var i=0;i<waveformBars.length;i++){
+    var bh=Math.max(4,waveformBars[i]*H*.88), y=(H-bh)/2, x=i*(bw+gap);
+    dim += '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw+'" height="'+bh.toFixed(1)+'" rx="1.2" fill="rgba(253,243,224,0.13)"/>';
+    lit  += '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw+'" height="'+bh.toFixed(1)+'" rx="1.2" fill="rgba(232,168,50,0.9)"/>';
+  }
+  document.getElementById('waveformContainer').innerHTML =
+    '<svg width="'+waveformW+'" height="'+H+'" viewBox="0 0 '+waveformW+' '+H+'" preserveAspectRatio="none" style="width:100%;height:'+H+'px">' +
+    '<defs><clipPath id="wClip"><rect id="wClipRect" x="0" y="0" width="0" height="'+H+'"/></clipPath></defs>' +
+    '<g>'+dim+'</g><g clip-path="url(#wClip)">'+lit+'</g></svg>';
 }
-
-function updateWaveformProgress(pct) {
-  const rect=document.getElementById('wClipRect');
-  if(rect) rect.setAttribute('width',(pct*waveformSvgW).toFixed(2));
+function updateWaveform(pct) {
+  var r = document.getElementById('wClipRect');
+  if (r) r.setAttribute('width', (pct*waveformW).toFixed(2));
 }
-
 function seekFromWaveform(e) {
-  if(!audio.duration) return;
-  const c=document.getElementById('waveformContainer');
-  const r=c.getBoundingClientRect();
-  const pct=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
-  audio.currentTime=pct*audio.duration;
+  if (!audio.duration) return;
+  var c = document.getElementById('waveformContainer');
+  var rect = c.getBoundingClientRect();
+  audio.currentTime = Math.max(0, Math.min(1,(e.clientX-rect.left)/rect.width)) * audio.duration;
 }
-
-// ── INIT ──
-if(configured){
-  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON);
-  document.getElementById('configBanner').style.display='none';
-  loadEntries();
-}
-document.getElementById('uDate').valueAsDate=new Date();
 
 // ── VIEW ──
-function showView(name){
-  ['view-archive','view-admin-gate','view-admin-upload'].forEach(id=>{
-    const el=document.getElementById(id);
+function showView(name) {
+  ['view-archive','view-admin-gate','view-admin-upload'].forEach(function(id){
+    var el = document.getElementById(id);
     el.style.display='none'; el.classList.remove('active');
   });
-  document.querySelectorAll('.hn-btn').forEach(b=>b.classList.remove('active'));
-  const el=document.getElementById('view-'+name);
-  if(el){el.style.display='block';el.classList.add('active');}
-  if(name==='archive') document.querySelectorAll('.hn-btn')[0].classList.add('active');
-  if(name.startsWith('admin')) document.querySelectorAll('.hn-btn')[1].classList.add('active');
+  document.querySelectorAll('.hn-btn').forEach(function(b){ b.classList.remove('active'); });
+  var el = document.getElementById('view-'+name);
+  if (el) { el.style.display='block'; el.classList.add('active'); }
+  if (name==='archive') document.querySelectorAll('.hn-btn')[0].classList.add('active');
+  if (name.startsWith('admin')) document.querySelectorAll('.hn-btn')[1].classList.add('active');
 }
 
-// ── LOAD ──
-async function loadEntries(){
-  if(!configured) return;
-  const {data}=await sb.from('devotionals').select('*').order('entry_date',{ascending:false});
-  entries=data||[];
+// ── LOAD ENTRIES ──
+async function loadEntries() {
+  var res = await sb.from('devotionals').select('*').order('entry_date', {ascending:false});
+  entries = res.data || [];
   renderGrid();
-  if(entries.length>0) loadEntry(entries[0], false);
+  if (entries.length > 0) loadEntry(entries[0], false);
 }
 
-function renderGrid(){
-  const grid=document.getElementById('archiveGrid');
-  if(!entries.length){
-    grid.innerHTML='<div class="empty-state" style="padding:2rem;text-align:center"><div class="g">✦</div><p>No entries yet.</p></div>';
+function renderGrid() {
+  var grid = document.getElementById('archiveGrid');
+  if (!entries.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="g">✦</div><p>No entries yet.</p></div>';
     return;
   }
-  grid.innerHTML=entries.map(e=>{
-    const d=new Date(e.entry_date+'T12:00:00');
-    const lbl=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    const thumbEl=e.art_url
-      ?`<div class="a-thumb"><img class="a-art" src="${e.art_url}"/></div>`
-      :`<div class="a-thumb"><div class="a-art-ph">✦</div></div>`;
-    return `<div class="a-card" id="card-${e.id}" onclick='loadEntry(entries.find(x=>x.id==="${e.id}"))'>
-      ${thumbEl}
-      <div class="a-info">
-        <div class="a-title">${e.title}</div>
-        <div class="a-date">${lbl}</div>
-        <div class="a-ref">${e.scripture||''}</div>
-      </div>
-      <div class="a-actions">
-        <div class="a-play">▶</div>
-        <button class="a-delete" onclick="openDeleteModal('${e.id}','${e.title.replace(/'/g,"\\'")}',event)">✕</button>
-      </div>
-    </div>`;
+  grid.innerHTML = entries.map(function(e) {
+    var d = new Date(e.entry_date+'T12:00:00');
+    var lbl = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    var thumb = e.art_url ? '<div class="a-thumb"><img class="a-art" src="'+e.art_url+'"/></div>'
+                          : '<div class="a-thumb"><div class="a-art-ph">✦</div></div>';
+    return '<div class="a-card" id="card-'+e.id+'" onclick="loadEntry(entries.find(function(x){return x.id===\''+e.id+'\'}))">' +
+      thumb +
+      '<div class="a-info"><div class="a-title">'+e.title+'</div><div class="a-date">'+lbl+'</div><div class="a-ref">'+(e.scripture||'')+'</div></div>' +
+      '<div class="a-actions"><div class="a-play">▶</div>' +
+      '<button class="a-delete" onclick="openDeleteModal(\''+e.id+'\',\''+e.title.replace(/'/g,"\\'")+'\'  ,event)">✕</button></div>' +
+      '</div>';
   }).join('');
 }
 
 function highlightCard(id) {
-  document.querySelectorAll('.a-card').forEach(c=>c.classList.remove('now-playing'));
-  const card=document.getElementById('card-'+id);
-  if(card) card.classList.add('now-playing');
+  document.querySelectorAll('.a-card').forEach(function(c){ c.classList.remove('now-playing'); });
+  var card = document.getElementById('card-'+id);
+  if (card) card.classList.add('now-playing');
 }
 
 // ── LOAD ENTRY ──
-function loadEntry(entry, autoplay=true){
-  if(!entry) return;
-  current=entry;
-
-  const d=new Date(entry.entry_date+'T12:00:00');
-  document.getElementById('pEyebrow').textContent=d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  document.getElementById('pTitle').innerHTML=`<em>${entry.title}</em>`;
-  document.getElementById('pScripture').textContent=entry.scripture||'';
-
-  // album art
-  const img=document.getElementById('artImg');
-  const ph=document.getElementById('artPh');
-  if(entry.art_url){
-    img.onload=()=>extractAndApplyColor(img);
-    img.src=entry.art_url; img.style.display='block'; ph.style.display='none';
+function loadEntry(entry, autoplay) {
+  if (!entry) return;
+  if (autoplay === undefined) autoplay = true;
+  current = entry;
+  var d = new Date(entry.entry_date+'T12:00:00');
+  document.getElementById('pEyebrow').textContent = d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('pTitle').innerHTML = '<em>'+entry.title+'</em>';
+  document.getElementById('pScripture').textContent = entry.scripture||'';
+  var img = document.getElementById('artImg'), ph = document.getElementById('artPh');
+  if (entry.art_url) {
+    img.onload = function(){ extractColor(img); };
+    img.src = entry.art_url; img.style.display='block'; ph.style.display='none';
   } else {
     img.style.display='none'; ph.style.display='flex';
-    document.documentElement.style.setProperty('--dyn-r','232');
-    document.documentElement.style.setProperty('--dyn-g','168');
-    document.documentElement.style.setProperty('--dyn-b','50');
     document.getElementById('ttPlinth').style.boxShadow='';
   }
-
   renderWaveform(entry);
   highlightCard(entry.id);
-
-  if(entry.audio_url){
-    audio.src=entry.audio_url; audio.load();
-    audio.play().then(()=>{ setPlay(true); tryInitAudio(); }).catch(()=>setPlay(false));
-  } else setPlay(false);
-
+  if (entry.audio_url) {
+    audio.src = entry.audio_url;
+    audio.load();
+    if (autoplay) {
+      audio.play().then(function(){ setPlay(true); tryInitAudio(); }).catch(function(){ setPlay(false); });
+    }
+  } else { setPlay(false); }
   showView('archive');
 }
 
 // ── PLAYBACK ──
-function setPlay(val){
-  playing=val;
-  document.getElementById('playBtn').textContent=val?'⏸':'▶';
-  const scene=document.getElementById('ttScene');
-  const arm=document.getElementById('tonearmArm');
-  const np=document.getElementById('npRow');
-  if(val){scene.classList.add('is-playing');arm.style.transform='rotate(-12deg)';np.style.opacity='1';}
-  else{scene.classList.remove('is-playing');arm.style.transform='rotate(-28deg)';np.style.opacity='0';}
+function setPlay(val) {
+  playing = val;
+  document.getElementById('playBtn').textContent = val ? '⏸' : '▶';
+  var scene = document.getElementById('ttScene'), arm = document.getElementById('tonearmArm'), np = document.getElementById('npRow');
+  if (val) { scene.classList.add('is-playing'); arm.style.transform='rotate(-12deg)'; np.style.opacity='1'; }
+  else     { scene.classList.remove('is-playing'); arm.style.transform='rotate(-28deg)'; np.style.opacity='0'; }
 }
-
-function togglePlay(){
-  if(!current||!current.audio_url) return;
-  tryInitAudio();
-  if(audio.paused){audio.play().then(()=>{setPlay(true);tryInitAudio();}).catch(()=>setPlay(false));}
-  else{audio.pause();setPlay(false);}
+function togglePlay() {
+  if (!current || !current.audio_url) return;
+  if (audio.paused) {
+    audio.play().then(function(){ setPlay(true); tryInitAudio(); }).catch(function(){});
+  } else { audio.pause(); setPlay(false); }
 }
-
-function skipBack(){ audio.currentTime=0; }
-function skipFwd(){ audio.currentTime=Math.min(audio.duration||0,audio.currentTime+15); }
-
-// LOOP
-let loopOn=false;
-function toggleLoop(){
-  loopOn=!loopOn;
-  audio.loop=loopOn;
-  document.getElementById('loopBtn').classList.toggle('active',loopOn);
-  toast(loopOn?'Loop On':'Loop Off');
+function skipBack() { audio.currentTime = 0; }
+function skipFwd()  { audio.currentTime = Math.min(audio.duration||0, audio.currentTime+15); }
+function toggleLoop() {
+  loopOn = !loopOn; audio.loop = loopOn;
+  document.getElementById('loopBtn').classList.toggle('active', loopOn);
+  toast(loopOn ? 'Loop On' : 'Loop Off');
 }
-
-// SPEED
-function setSpeed(rate){
-  audio.playbackRate=rate;
-  document.querySelectorAll('.spd').forEach(b=>{
-    b.classList.toggle('active',parseFloat(b.textContent)===rate);
-  });
+function setSpeed(rate) {
+  audio.playbackRate = rate;
+  document.querySelectorAll('.spd').forEach(function(b){ b.classList.toggle('active', parseFloat(b.textContent)===rate); });
 }
-
-// AUTO-ADVANCE
-audio.onended=()=>{
-  if(loopOn) return; // audio.loop handles it
+audio.ontimeupdate = function() {
+  var pct = audio.duration ? audio.currentTime/audio.duration : 0;
+  updateWaveform(pct);
+  document.getElementById('tNow').textContent = fmt(audio.currentTime);
+  document.getElementById('tTot').textContent = fmt(audio.duration||0);
+};
+audio.onended = function() {
+  if (loopOn) return;
   setPlay(false);
-  if(!entries.length) return;
-  const idx=entries.findIndex(e=>e.id===current?.id);
-  const next=entries[idx+1]; // older = next in sorted-newest-first array
-  if(next){ loadEntry(next); toast('Next: '+next.title); }
+  var idx = entries.findIndex(function(e){ return current && e.id===current.id; });
+  var next = entries[idx+1];
+  if (next) { loadEntry(next, true); toast('Next: '+next.title); }
 };
-
-audio.ontimeupdate=()=>{
-  const pct=audio.duration?audio.currentTime/audio.duration:0;
-  updateWaveformProgress(pct);
-  document.getElementById('tNow').textContent=fmt(audio.currentTime);
-  document.getElementById('tTot').textContent=fmt(audio.duration||0);
-};
-
-function fmt(s){ if(!s||isNaN(s)) return '0:00'; return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`; }
+function fmt(s) { if(!s||isNaN(s)) return '0:00'; return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'); }
 
 // ── LYRICS MODAL ──
-function openModal(e){
-  if(e) e.stopPropagation();
-  if(!current) return;
-  const d=new Date(current.entry_date+'T12:00:00');
-  document.getElementById('mDate').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  document.getElementById('mTitle').textContent=current.title||'';
-  document.getElementById('mScripture').textContent=current.scripture||'';
-  document.getElementById('mLyrics').textContent=current.lyrics||'No lyrics added for this entry.';
-  const mi=document.getElementById('mArtImg');
-  if(current.art_url){mi.src=current.art_url;mi.style.display='block';}
-  else mi.style.display='none';
+function openModal(e) {
+  if (e) e.stopPropagation();
+  if (!current) return;
+  var d = new Date(current.entry_date+'T12:00:00');
+  document.getElementById('mDate').textContent = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('mTitle').textContent = current.title||'';
+  document.getElementById('mScripture').textContent = current.scripture||'';
+  document.getElementById('mLyrics').textContent = current.lyrics||'No lyrics added for this entry.';
+  var mi = document.getElementById('mArtImg');
+  if (current.art_url) { mi.src=current.art_url; mi.style.display='block'; } else { mi.style.display='none'; }
   document.getElementById('modalBg').classList.add('open');
   document.body.style.overflow='hidden';
 }
-function closeModal(){ document.getElementById('modalBg').classList.remove('open'); document.body.style.overflow=''; }
-function closeModalBg(e){ if(e.target===document.getElementById('modalBg')) closeModal(); }
+function closeModal() { document.getElementById('modalBg').classList.remove('open'); document.body.style.overflow=''; }
+function closeModalBg(e) { if(e.target===document.getElementById('modalBg')) closeModal(); }
 
 // ── ADMIN ──
-function checkGate(){
-  if(document.getElementById('gatePw').value===ADMIN_PASSWORD){
-    isAdmin=true;
-    document.body.classList.add('admin-mode');
+function checkGate() {
+  if (document.getElementById('gatePw').value === ADMIN_PASSWORD) {
+    isAdmin=true; document.body.classList.add('admin-mode');
     document.getElementById('adminBadge').classList.add('show');
     showView('admin-upload'); toast('Welcome ✦');
   } else toast('Incorrect password');
 }
 
 // ── DELETE ──
-function openDeleteModal(id,title,e){
-  e.stopPropagation();
-  pendingDeleteId=id;
-  document.getElementById('delSongName').textContent=`"${title}"`;
+function openDeleteModal(id, title, e) {
+  e.stopPropagation(); pendingDeleteId=id;
+  document.getElementById('delSongName').textContent='"'+title+'"';
   document.getElementById('dStep1').className='del-step active';
   document.getElementById('dStep2').className='del-step';
   document.getElementById('dLine').className='del-step-line';
   document.getElementById('delTitle').textContent='Delete This Recording?';
-  document.getElementById('delSub').textContent='This permanently removes the song, audio, and lyrics. Cannot be undone.';
+  document.getElementById('delSub').textContent='This permanently removes the song, audio, and lyrics.';
   document.getElementById('delRow1').style.display='flex';
   document.getElementById('delRow2').style.display='none';
   document.getElementById('delModalBg').classList.add('open');
   document.body.style.overflow='hidden';
 }
-function advanceDelete(){
+function advanceDelete() {
   document.getElementById('dStep1').className='del-step done';
   document.getElementById('dLine').className='del-step-line done';
   document.getElementById('dStep2').className='del-step active';
   document.getElementById('delTitle').textContent='Are You Absolutely Sure?';
-  document.getElementById('delSub').textContent='Final confirmation. This recording will be gone forever.';
+  document.getElementById('delSub').textContent='Final confirmation. This cannot be recovered.';
   document.getElementById('delRow1').style.display='none';
   document.getElementById('delRow2').style.display='flex';
 }
-function closeDeleteModal(){
+function closeDeleteModal() {
   document.getElementById('delModalBg').classList.remove('open');
-  document.body.style.overflow='';
-  pendingDeleteId=null;
+  document.body.style.overflow=''; pendingDeleteId=null;
 }
-async function executeDelete(){
-  if(!pendingDeleteId||!configured) return;
-  const btn=document.querySelector('#delRow2 .del-confirm');
+async function executeDelete() {
+  if (!pendingDeleteId) return;
+  var btn = document.querySelector('#delRow2 .del-confirm');
   btn.textContent='Deleting…'; btn.disabled=true;
-  const entry=entries.find(x=>x.id===pendingDeleteId);
-  const {error}=await sb.from('devotionals').delete().eq('id',pendingDeleteId);
-  if(error){toast('Delete failed');btn.textContent='Delete Forever';btn.disabled=false;return;}
-  if(entry){
-    if(entry.audio_url){ const p=entry.audio_url.split('/').pop(); await sb.storage.from(BUCKET_AUDIO).remove([p]); }
-    if(entry.art_url){ const p=entry.art_url.split('/').pop(); await sb.storage.from(BUCKET_ART).remove([p]); }
+  var entry = entries.find(function(x){ return x.id===pendingDeleteId; });
+  await sb.from('devotionals').delete().eq('id', pendingDeleteId);
+  if (entry) {
+    if (entry.audio_url) await sb.storage.from(BUCKET_AUDIO).remove([entry.audio_url.split('/').pop()]);
+    if (entry.art_url)   await sb.storage.from(BUCKET_ART).remove([entry.art_url.split('/').pop()]);
   }
   closeDeleteModal(); toast('Deleted');
-  if(current?.id===pendingDeleteId){
-    audio.pause(); audio.src=''; setPlay(false);
+  if (current && current.id===pendingDeleteId) {
+    audio.pause(); audio.src=''; setPlay(false); current=null;
     document.getElementById('pEyebrow').textContent='Select a recording below';
     document.getElementById('pTitle').innerHTML='Songs from the <em>Secret Place</em>';
     document.getElementById('pScripture').textContent='One song. One scripture. Every day.';
     document.getElementById('artImg').style.display='none';
     document.getElementById('artPh').style.display='flex';
     document.getElementById('waveformContainer').innerHTML='';
-    current=null;
   }
   await loadEntries();
 }
 
 // ── UPLOAD ──
-function previewArt(){
-  const f=document.getElementById('uArt').files[0];
-  if(!f) return;
-  document.getElementById('artPreviewImg').src=URL.createObjectURL(f);
+function previewArt() {
+  var f = document.getElementById('uArt').files[0];
+  if (!f) return;
+  document.getElementById('artPreviewImg').src = URL.createObjectURL(f);
   document.getElementById('artPreview').classList.add('show');
 }
-async function handleUpload(){
-  if(!configured){toast('Configure Supabase first');return;}
-  const title=document.getElementById('uTitle').value.trim();
-  const date=document.getElementById('uDate').value;
-  const scripture=document.getElementById('uScripture').value.trim();
-  const lyrics=document.getElementById('uLyrics').value.trim();
-  const audioFile=document.getElementById('uAudio').files[0];
-  const artFile=document.getElementById('uArt').files[0];
-  if(!title||!date){toast('Title and date required');return;}
-  const btn=document.getElementById('submitBtn');
-  const status=document.getElementById('upStatus');
+async function handleUpload() {
+  var title    = document.getElementById('uTitle').value.trim();
+  var date     = document.getElementById('uDate').value;
+  var scripture= document.getElementById('uScripture').value.trim();
+  var lyrics   = document.getElementById('uLyrics').value.trim();
+  var audioFile= document.getElementById('uAudio').files[0];
+  var artFile  = document.getElementById('uArt').files[0];
+  if (!title||!date) { toast('Title and date required'); return; }
+  var btn=document.getElementById('submitBtn'), status=document.getElementById('upStatus');
   btn.disabled=true;
-  let audio_url=null, art_url=null;
-  if(audioFile){
+  var audio_url=null, art_url=null;
+  if (audioFile) {
     status.textContent='Uploading audio…';
-    const ext=audioFile.name.split('.').pop();
-    const path=`${date}-${Date.now()}.${ext}`;
-    const {error}=await sb.storage.from(BUCKET_AUDIO).upload(path,audioFile,{upsert:true});
-    if(error){toast('Audio upload failed');btn.disabled=false;status.textContent='';return;}
-    audio_url=sb.storage.from(BUCKET_AUDIO).getPublicUrl(path).data.publicUrl;
+    var ext=audioFile.name.split('.').pop(), path=date+'-'+Date.now()+'.'+ext;
+    var res=await sb.storage.from(BUCKET_AUDIO).upload(path, audioFile, {upsert:true});
+    if (res.error) { toast('Audio upload failed'); btn.disabled=false; status.textContent=''; return; }
+    audio_url = sb.storage.from(BUCKET_AUDIO).getPublicUrl(path).data.publicUrl;
   }
-  if(artFile){
+  if (artFile) {
     status.textContent='Uploading artwork…';
-    const ext=artFile.name.split('.').pop();
-    const path=`${date}-art-${Date.now()}.${ext}`;
-    const {error}=await sb.storage.from(BUCKET_ART).upload(path,artFile,{upsert:true});
-    if(!error) art_url=sb.storage.from(BUCKET_ART).getPublicUrl(path).data.publicUrl;
+    var ext2=artFile.name.split('.').pop(), path2=date+'-art-'+Date.now()+'.'+ext2;
+    var res2=await sb.storage.from(BUCKET_ART).upload(path2, artFile, {upsert:true});
+    if (!res2.error) art_url = sb.storage.from(BUCKET_ART).getPublicUrl(path2).data.publicUrl;
   }
   status.textContent='Saving…';
-  const {error}=await sb.from('devotionals').insert({title,entry_date:date,scripture,lyrics,audio_url,art_url});
-  if(error){toast('Save failed');console.error(error);}
-  else{
+  var res3=await sb.from('devotionals').insert({title,entry_date:date,scripture,lyrics,audio_url,art_url});
+  if (res3.error) { toast('Save failed'); console.error(res3.error); }
+  else {
     toast('Published ✦');
-    ['uTitle','uScripture','uLyrics'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('uAudio').value='';
-    document.getElementById('uArt').value='';
+    ['uTitle','uScripture','uLyrics'].forEach(function(id){ document.getElementById(id).value=''; });
+    document.getElementById('uAudio').value=''; document.getElementById('uArt').value='';
     document.getElementById('uDate').valueAsDate=new Date();
     document.getElementById('artPreview').classList.remove('show');
-    await loadEntries();
-    showView('archive');
+    await loadEntries(); showView('archive');
   }
   btn.disabled=false; status.textContent='';
 }
 
-function toast(msg){
-  const el=document.getElementById('toast');
+// ── TOAST ──
+function toast(msg) {
+  var el=document.getElementById('toast');
   el.textContent=msg; el.classList.add('show');
-  setTimeout(()=>el.classList.remove('show'),2800);
+  setTimeout(function(){ el.classList.remove('show'); }, 2800);
 }
 </script>
-
-<!--
-╔══════════════════════════════════════════════════════════╗
-║                  5-MINUTE SETUP GUIDE                    ║
-╚══════════════════════════════════════════════════════════╝
-
-1. SUPABASE PROJECT
-   → supabase.com → New Project
-   → Settings > API → copy Project URL + anon key
-   → Paste into SUPABASE_URL and SUPABASE_ANON in script
-
-2. RUN THIS SQL (SQL Editor in Supabase):
-
-   create table devotionals (
-     id          uuid primary key default gen_random_uuid(),
-     title       text not null,
-     scripture   text,
-     entry_date  date not null,
-     lyrics      text,
-     audio_url   text,
-     art_url     text,
-     created_at  timestamptz default now()
-   );
-   alter table devotionals enable row level security;
-   create policy "Public read"  on devotionals for select using (true);
-   create policy "Anon insert"  on devotionals for insert with check (true);
-   create policy "Anon delete"  on devotionals for delete using (true);
-
-3. CREATE 2 STORAGE BUCKETS (both Public):
-   → devotional-audio
-   → devotional-art
-
-4. CHANGE PASSWORD: ADMIN_PASSWORD = 'yourpassword'
-
-5. DEPLOY TO NETLIFY:
-   → netlify.com → Add New Site → Deploy Manually
-   → Drag index.html → Live instantly!
--->
 </body>
 </html>
