@@ -1,5 +1,15 @@
 {
   "name": "selah",
   "pages_build_output_dir": ".",
-  "compatibility_date": "2026-04-24"
+  "compatibility_date": "2026-04-24",
+  "vars": {
+    "AUDIO_PUBLIC_BASE_URL": "https://pub-4a790fcd9a124c6f83cdeaae9c1905fd.r2.dev",
+    "AUDIO_KEY_PREFIX": "audio"
+  },
+  "r2_buckets": [
+    {
+      "bucket_name": "selah-audio",
+      "binding": "AUDIO_BUCKET"
+    }
+  ]
 }

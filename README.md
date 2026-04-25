@@ -31,6 +31,20 @@ The UI uses a vinyl-player metaphor with:
 | Config | `wrangler.jsonc` |
 | Typography | Google Fonts (`Libre Baskerville`, `Bebas Neue`, `Nunito`) |
 
+## Screenshots
+
+### Supabase service role location
+
+This screenshot shows where the `service_role` secret is located in the Supabase dashboard. That secret now belongs only in server-side Cloudflare configuration and should never be exposed in the frontend.
+
+![Supabase service role key location](screenshots/supabase-service-role-location.png)
+
+### Cloudflare R2 activation billing checkpoint
+
+This screenshot captures the moment architecture decisions become financially real. Once you are entering your own card and authorizing your own spend, you naturally slow down and double-check assumptions: how storage is billed, what counts as an operation, what stays inside the free tier, and whether the system design avoids surprise costs. That pressure is useful. It reinforces careful architecture, cost awareness, and eliminating surprises before they happen.
+
+![Cloudflare R2 activation billing checkpoint](screenshots/cloudflare-r2-activation-billing-checkpoint.png)
+
 ## Project Structure
 
 ```text
@@ -40,6 +54,9 @@ The UI uses a vinyl-player metaphor with:
 │       ├── delete-audio.js
 │       ├── devotionals.js
 │       └── upload-audio.js
+├── screenshots/
+│   ├── cloudflare-r2-activation-billing-checkpoint.png
+│   └── supabase-service-role-location.png
 ├── index.html
 ├── README.md
 └── wrangler.jsonc
