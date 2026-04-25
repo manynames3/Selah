@@ -503,8 +503,9 @@ const ADMIN_PASSWORD = 'grace2024';
 const BUCKET_AUDIO   = 'devotional-audio';
 const BUCKET_ART     = 'devotional-art';
 const DEVOTIONALS_REST_URL = SUPABASE_URL + '/rest/v1/devotionals?select=*&order=entry_date.desc&apikey=' + encodeURIComponent(SUPABASE_ANON);
-const R2_PRESIGN_UPLOAD_URL = '/.netlify/functions/r2-presign-upload';
-const R2_DELETE_OBJECT_URL = '/.netlify/functions/r2-delete-object';
+const ARCHIVE_FUNCTION_URL = '/api/devotionals';
+const AUDIO_UPLOAD_URL = '/api/upload-audio';
+const AUDIO_DELETE_URL = '/api/delete-audio';
 
 // ── STATE ──
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -669,7 +670,7 @@ async function readJsonResponse(res) {
   if (!text) return {};
   try { return JSON.parse(text); } catch(e) { return {message:text}; }
 }
-async function requestFunctionJson(url, body) {
+async function requestJson(url, body) {
   var res = await fetch(url, {
     method: 'POST',
     headers: {'content-type':'application/json'},
@@ -682,22 +683,21 @@ async function requestFunctionJson(url, body) {
 async function uploadAudioFile(audioFile, entryDate, statusEl) {
   if (audioFile && canUseServerFunctions()) {
     try {
-      statusEl.textContent = 'Preparing audio upload…';
-      var signed = await requestFunctionJson(R2_PRESIGN_UPLOAD_URL, {
-        filename: audioFile.name,
-        contentType: audioFile.type || 'audio/mpeg',
-        entryDate: entryDate
-      });
       statusEl.textContent = 'Uploading audio…';
-      var putRes = await fetch(signed.uploadUrl, {
-        method: 'PUT',
-        headers: {'content-type': signed.contentType || audioFile.type || 'application/octet-stream'},
+      var uploadRes = await fetch(AUDIO_UPLOAD_URL + '?entryDate=' + encodeURIComponent(entryDate || '') + '&filename=' + encodeURIComponent(audioFile.name || 'track.mp3'), {
+        method: 'POST',
+        headers: {
+          'content-type': audioFile.type || 'application/octet-stream',
+          'x-entry-date': entryDate || '',
+          'x-file-name': audioFile.name || 'track.mp3'
+        },
         body: audioFile
       });
-      if (!putRes.ok) throw new Error('r2-upload-' + putRes.status);
-      return signed.publicUrl;
+      var uploaded = await readJsonResponse(uploadRes);
+      if (!uploadRes.ok) throw new Error(uploaded.error || uploaded.message || ('upload-' + uploadRes.status));
+      return uploaded.publicUrl;
     } catch (err) {
-      console.warn('R2 audio upload failed, falling back to Supabase storage:', err.message);
+      console.warn('Cloudflare audio upload failed, falling back to Supabase storage:', err.message);
     }
   }
   statusEl.textContent = 'Uploading audio…';
@@ -711,10 +711,10 @@ async function deleteAudioFile(audioUrl) {
   if (!audioUrl) return;
   if (canUseServerFunctions()) {
     try {
-      await requestFunctionJson(R2_DELETE_OBJECT_URL, {url: audioUrl});
+      await requestJson(AUDIO_DELETE_URL, {url: audioUrl});
       return;
     } catch (err) {
-      console.warn('R2 audio delete failed, falling back to Supabase storage:', err.message);
+      console.warn('Cloudflare audio delete failed, falling back to Supabase storage:', err.message);
     }
   }
   var audioKey = extractSupabasePublicObjectKey(audioUrl, BUCKET_AUDIO);
@@ -825,7 +825,7 @@ async function fetchEntriesViaRest(timeoutMs) {
 }
 async function fetchEntriesViaFunction(timeoutMs) {
   if (!/^https?:$/.test(location.protocol)) throw new Error('function-unavailable');
-  return await fetchJsonViaXhr('/.netlify/functions/devotionals', timeoutMs);
+  return await fetchJsonViaXhr(ARCHIVE_FUNCTION_URL, timeoutMs);
 }
 async function loadEntries(retries) {
   if (retries === undefined) retries = 4;

@@ -2,77 +2,128 @@
 
 Daily devotional songwriting site: one song, one scripture, one archive.
 
-The app is intentionally simple:
+This project is intentionally lightweight:
 - one main frontend file: `index.html`
-- Netlify serverless functions for archive reads and R2 media operations
-- one small `package.json` for server-side function dependencies
-- Netlify config for cache behavior: `netlify.toml`
+- Cloudflare Pages for static hosting
+- Cloudflare Pages Functions for server-side helpers
+- Cloudflare R2 for MP3 storage
+- Supabase for devotional metadata and artwork storage
 
-The current UI uses a vinyl-player metaphor with a turntable, animated tonearm, waveform scrubbing, lyrics modal, archive list, and password-gated admin upload flow.
+The UI uses a vinyl-player metaphor with:
+- animated disc + tonearm
+- waveform scrubbing
+- lyrics modal
+- archive list
+- admin-gated upload flow
 
 ## Tech Stack
 
 | Layer | Tooling |
 | --- | --- |
 | Frontend | Vanilla HTML, CSS, JavaScript |
-| Client data/auth/storage access | `@supabase/supabase-js` via CDN |
+| Client SDK | `@supabase/supabase-js` via CDN |
 | MP3 artwork extraction | `jsmediatags` via CDN |
-| Media object storage | Cloudflare R2 for MP3 uploads |
-| Data store | Supabase Postgres |
+| Metadata store | Supabase Postgres |
 | Artwork storage | Supabase Storage |
-| Hosting | Netlify |
-| Serverless proxy | Netlify Functions |
-| Function dependencies | AWS SDK v3 S3 client + presigner |
+| Audio storage | Cloudflare R2 |
+| Hosting | Cloudflare Pages |
+| Server-side endpoints | Cloudflare Pages Functions |
+| Config | `wrangler.jsonc` |
 | Typography | Google Fonts (`Libre Baskerville`, `Bebas Neue`, `Nunito`) |
-
-### Current vs Recommended Stack
-
-Current production shape:
-- Supabase stores metadata in Postgres
-- Cloudflare R2 stores MP3 files
-- Supabase Storage stores artwork
-- Netlify hosts the site plus archive/R2 helper functions
-
-Recommended next shape:
-- keep Supabase for metadata and CRUD
-- keep MP3 delivery on Cloudflare R2
-- optionally move artwork to R2 later as well
-
-That pivot is about storage strategy, not a rewrite of the application model.
 
 ## Project Structure
 
 ```text
 .
+├── functions/
+│   └── api/
+│       ├── delete-audio.js
+│       ├── devotionals.js
+│       └── upload-audio.js
 ├── index.html
 ├── README.md
-├── package.json
-├── netlify.toml
-└── netlify/
-    ├── functions/
-    │   ├── _r2.js
-    │   ├── devotionals.js
-    │   ├── r2-delete-object.js
-    │   └── r2-presign-upload.js
+└── wrangler.jsonc
 ```
 
-## How It Works
+## Current Architecture
 
-### Frontend
+Current app split:
+- Supabase stores devotional metadata in the `devotionals` table
+- Supabase Storage holds artwork
+- Cloudflare R2 holds MP3 files
+- Cloudflare Pages serves the static site
+- Cloudflare Pages Functions handle:
+  - archive proxy reads
+  - audio upload into R2
+  - audio deletion from R2
 
-`index.html` contains:
-- all page markup
-- all styling
-- all playback logic
-- Supabase reads/writes for devotional metadata
-- direct-to-R2 signed upload flow for MP3 files
-- Supabase artwork upload flow
-- waveform generation and seeking
-- tonearm animation and playback-state sync
+This is a deliberate hybrid architecture, not an accidental mix of services.
 
-This repo deliberately avoids a framework or build step. That keeps deployment friction low and makes Netlify deploys straightforward.
+## Why Cloudflare
 
-### Data Model
+Cloudflare is the better fit for this project because:
+
+- the site itself is mostly static
+- the MP3 files are the largest assets in the app
+- R2 is a better long-term home for audio than database-adjacent storage
+- Pages static hosting is a better fit than Netlify for low-maintenance free usage
+- Workers/Pages Functions keep the runtime small without forcing a framework rewrite
+
+The goal here is not "use one vendor for everything."  
+The goal is "put each workload on the tool that fits it best."
+
+For this app, that means:
+- Supabase for relational metadata + simple CRUD
+- Cloudflare for delivery and binary media storage
+
+## Why Not Keep Netlify
+
+Netlify was workable early on, but it became a weak point for this project because:
+
+- the site is simple enough that Netlify was not adding architectural leverage
+- usage ceilings were easy to hit for a media-oriented project
+- once R2 became the right place for MP3s, Cloudflare Pages + Functions became the more natural deployment target
+
+Switching to Cloudflare keeps the app lightweight while reducing pressure on the hosting layer.
+
+## What I Would Have Done On AWS
+
+If I deployed this through AWS, I would likely have used:
+
+- **S3** for static site files and/or MP3 storage
+- **CloudFront** in front of the site and media
+- **Lambda** + **API Gateway** for upload/delete/archive helper endpoints
+- optionally **Route 53** for DNS
+- Supabase could still remain as the metadata database, or I could replace it later with DynamoDB / RDS depending on how far I wanted to go
+
+That AWS version would be valid, but it is not the best fit here.
+
+### AWS Thought Process
+
+AWS would make sense if the project needed:
+- deeper infrastructure control
+- a wider multi-service backend
+- more enterprise-style deployment patterns
+- tighter integration into an existing AWS-heavy stack
+
+### Why I Am Not Choosing AWS Here
+
+Cloudflare is a better fit for this project specifically because:
+
+- the app is small and static-first
+- the runtime needs are minimal
+- R2 is a natural match for MP3 object storage
+- the Cloudflare deployment model is simpler for long-lived hobby/portfolio use
+- AWS free-tier economics are more time-bound and less comfortable for a "set it up and keep it around for years" project
+- AWS would introduce more moving parts than this app actually needs
+
+In short:
+- AWS would be more configurable
+- Cloudflare is more appropriate
+
+That is the key tradeoff.
+
+## Data Model
 
 The app reads from a single `devotionals` table:
 
@@ -104,38 +155,43 @@ create policy "Anon delete" on devotionals
 for delete using (true);
 ```
 
-Storage buckets:
-- `devotional-audio`
+Supabase Storage bucket still used for artwork:
 - `devotional-art`
 
-### Archive Loading
+Legacy audio bucket references may still exist in historical data or fallback logic:
+- `devotional-audio`
 
-The archive now prefers a production-safe path:
+## How Uploads Work
 
-1. Netlify function `/.netlify/functions/devotionals`
+### Audio
+
+Current MP3 upload flow:
+
+1. user selects an audio file
+2. frontend posts the file to Cloudflare Pages Function `/api/upload-audio`
+3. the function writes the object into R2 through a native bucket binding
+4. the function returns the public MP3 URL
+5. frontend stores that URL in Supabase as `audio_url`
+
+### Artwork
+
+Current artwork flow:
+
+1. artwork is extracted client-side from MP3 metadata using `jsmediatags`
+2. extracted art is uploaded to Supabase Storage
+3. artwork URL is stored in Supabase as `art_url`
+
+This keeps the heaviest storage class, audio, on R2 while avoiding an unnecessary second migration for artwork.
+
+## Archive Loading
+
+The archive now prefers:
+
+1. Cloudflare Pages Function `/api/devotionals`
 2. direct Supabase REST read
 3. direct Supabase client query
 
-That fallback chain exists because browser-only first-load archive loading was intermittently hanging in the deployed flow. The Netlify function removes that dependency on a fragile browser-to-Supabase path.
-
-### Storage Pivot: Supabase -> Cloudflare R2 for Media
-
-The app now uses a hybrid storage model:
-
-- Supabase Postgres remains the source of truth for song metadata
-- Supabase still handles the record-level CRUD workflow
-- Cloudflare R2 is the storage backend for MP3 files
-- artwork remains in Supabase Storage for now
-
-The implemented flow is:
-
-1. frontend asks Netlify for a presigned R2 upload URL
-2. frontend uploads the MP3 directly to R2
-3. frontend saves the resulting public R2 URL into `audio_url`
-4. frontend continues to write devotional metadata to Supabase
-5. delete requests remove the Supabase record and then clean up the R2 object
-
-That keeps the schema and most of the UI logic intact while moving the heaviest asset class off Supabase storage quotas.
+That fallback chain exists because browser-only first-load archive loading was intermittently unreliable in deployment. The server-side archive proxy removes that dependency on a fragile browser-to-Supabase path.
 
 ## Setup
 
@@ -143,12 +199,11 @@ That keeps the schema and most of the UI logic intact while moving the heaviest 
 
 Create a Supabase project and set up:
 - the `devotionals` table
-- the public read / anon insert / anon delete policies
-- two public storage buckets:
-  - `devotional-audio`
+- public read / anon insert / anon delete policies
+- storage bucket for artwork:
   - `devotional-art`
 
-### 2. Configure the app
+### 2. Configure the frontend
 
 Open `index.html` and update the config block:
 
@@ -158,52 +213,73 @@ const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY';
 const ADMIN_PASSWORD = 'your-password';
 ```
 
-### 3. Configure Netlify environment variables for R2
+### 3. Configure Cloudflare R2
 
-Set these in Netlify:
+Create an R2 bucket for MP3s.
+
+You will bind that bucket to Cloudflare Pages Functions as:
 
 ```text
-CF_R2_ACCOUNT_ID
-CF_R2_ACCESS_KEY_ID
-CF_R2_SECRET_ACCESS_KEY
-CF_R2_AUDIO_BUCKET
-CF_R2_AUDIO_PUBLIC_BASE_URL
-CF_R2_AUDIO_KEY_PREFIX
+AUDIO_BUCKET
+```
+
+You also need a public delivery base URL for playback, via:
+- a public bucket URL, or
+- a custom domain in front of the bucket
+
+### 4. Configure Cloudflare Pages environment variables
+
+Set these in your Cloudflare Pages project:
+
+```text
+SUPABASE_URL
+SUPABASE_ANON
+AUDIO_PUBLIC_BASE_URL
+AUDIO_KEY_PREFIX
 ```
 
 Notes:
-- `CF_R2_AUDIO_PUBLIC_BASE_URL` should be your public R2 bucket URL or custom domain
-- `CF_R2_AUDIO_KEY_PREFIX` is optional, for example `audio`
-- the R2 bucket must be publicly readable for direct MP3 playback by URL
-- configure R2 bucket CORS to allow `PUT` from your Netlify site origin, or browser uploads to presigned URLs will fail
+- `AUDIO_PUBLIC_BASE_URL` should be the public URL used for MP3 playback
+- `AUDIO_KEY_PREFIX` is optional, for example `audio`
+- bind `AUDIO_BUCKET` as an R2 bucket binding in Pages
 
-### 4. Configure the Netlify functions
+### 5. Configure `wrangler.jsonc`
 
-These files now participate in the storage flow:
+This repo includes:
 
-```text
-netlify/functions/_r2.js
-netlify/functions/devotionals.js
-netlify/functions/r2-presign-upload.js
-netlify/functions/r2-delete-object.js
+```jsonc
+{
+  "name": "selah",
+  "pages_build_output_dir": ".",
+  "compatibility_date": "2026-04-24"
+}
 ```
 
-### 5. Deploy
+That is enough for a static Pages deployment with Functions. Bindings and secrets can be set in the Cloudflare dashboard.
 
-#### Netlify from GitHub
+## Deploy To Cloudflare Pages
+
+### GitHub deploy
 
 1. Push the repo to GitHub
-2. Create a Netlify site from that repository
-3. Netlify will deploy `index.html` as the main site
-4. Netlify will install `package.json` dependencies for the functions
-5. Netlify will expose:
-   - `/.netlify/functions/devotionals`
-   - `/.netlify/functions/r2-presign-upload`
-   - `/.netlify/functions/r2-delete-object`
+2. In Cloudflare, create a new Pages project
+3. Connect the GitHub repository
+4. Build settings:
+   - build command: leave blank
+   - output directory: `.`
+5. Add environment variables
+6. Add the `AUDIO_BUCKET` R2 binding
+7. Deploy
 
-#### Manual note
+### What Cloudflare will serve
 
-If you open `index.html` directly with `file://`, the Netlify function paths do not exist. The page can still render locally, but the production archive-loading and R2-upload paths are meant for the deployed Netlify site.
+Static frontend:
+- `/`
+
+Pages Functions:
+- `/api/devotionals`
+- `/api/upload-audio`
+- `/api/delete-audio`
 
 ## Thought Process
 
@@ -211,94 +287,53 @@ The project follows a few practical constraints:
 
 ### 1. Keep the app editable in one place
 
-The main UX and business logic live in one file so changes can be made quickly without a bundler, framework conventions, or build tooling overhead.
+The main UX and playback logic live in one file so the app can evolve quickly without framework overhead.
 
 ### 2. Use animation where it reinforces playback state
 
-The turntable UI is decorative, but the important motion is functional:
-- the disc spinning means playback is active
-- the waveform shows progress and allows seeking
-- the tonearm position reflects song progress
+The important motion is functional:
+- disc spin = playback state
+- waveform = seek/progress
+- tonearm = playback progress
 
-That means animation is tied to actual audio state instead of just CSS loops.
+That means animation is tied to the actual audio element, not just decorative loops.
 
-### 3. Preserve a static-site deployment model
+### 3. Separate metadata from media
 
-Even after the archive-loading bug, the solution stayed within the existing hosting model by adding a small Netlify function instead of moving the whole app to a framework or custom backend.
+Metadata and media age differently:
+- metadata is relational and query-heavy
+- media is storage/bandwidth-heavy
 
-### 4. Separate metadata from media when the workload demands it
+That is why Supabase remains the metadata system while R2 holds the MP3 files.
 
-Supabase is a good fit for structured devotional records and simple CRUD. Large audio files create a different kind of pressure:
-- storage quotas get hit sooner
-- media streaming/download usage grows differently than metadata queries
-- audio is the part of the app most likely to scale in total bytes
+### 4. Minimize migration risk
 
-That is why the recommended pivot is not "replace Supabase", but "keep Supabase where it is strong and move bulk media to object storage built for that job."
+This migration intentionally does **not**:
+- replace Supabase
+- rewrite the UI in a framework
+- change the table schema
 
-### 5. Minimize migration risk
+It only changes the hosting/runtime layer and the MP3 storage path.
 
-The R2 pivot is intentionally incremental:
-- do not replace the database
-- do not rewrite archive reads
-- do not rebuild the frontend around a new framework
-- only swap the upload/delete path for MP3 objects
-
-That keeps the blast radius small and makes the migration reversible if needed.
-
-## Why Cloudflare R2
-
-R2 is the recommended media-storage target for this project because:
-
-- the project uploads relatively large MP3 files
-- free-tier storage headroom is better suited to a growing song archive
-- egress-free delivery is a better match for downloadable/streamable audio
-- it lets the app keep its current Supabase-backed metadata model
-
-In other words: R2 is the better place for binary media, while Supabase remains the better place for the devotional record itself.
-
-## Media Upload Flow
-
-Current MP3 upload path:
-
-1. user selects an audio file
-2. frontend requests a presigned upload URL from Netlify
-3. frontend uploads the MP3 directly to Cloudflare R2
-4. frontend stores the final public MP3 URL in Supabase
-
-Current artwork path:
-
-1. artwork is extracted from the MP3 client-side with `jsmediatags`
-2. extracted artwork is uploaded to Supabase Storage
-3. artwork URL is stored in Supabase
-
-This split keeps the heavier media on R2 while avoiding an unnecessary second migration for artwork.
+That keeps the blast radius small.
 
 ## Troubleshooting Notes
 
 ### Archive stuck on "Loading songs..."
 
-This was one of the main debugging issues.
-
 Root causes and fixes:
-- browser-side archive loading was unreliable on initial load in the deployed flow
-- a visualizer init crash could prevent later setup code from running
+- browser-side archive loading was unreliable on initial load
+- a visualizer init crash could stop later setup code from running
 - direct client and REST reads needed a more resilient fallback chain
 
 What changed:
-- added `netlify/functions/devotionals.js` as a same-origin archive proxy
+- added a server-side archive proxy endpoint
 - made archive loading use function -> REST -> client fallback
-- guarded the visualizer canvas access so a missing/unsupported context does not break the rest of app initialization
-
-### MP3 storage limits on Supabase
-
-Another operational issue was storage pressure from 5 MB-ish MP3 uploads. That is what drove the R2 pivot:
-- MP3 files are the largest asset class in the app
-- metadata storage growth is minor by comparison
-- moving audio off Supabase reduces quota pressure without changing the query model
+- guarded visualizer canvas access so init cannot break the rest of the app
 
 ### Tonearm moving the wrong direction
 
-The original tonearm motion rotated away from the record instead of onto it. That was corrected first, then replaced with a progress-driven tonearm model.
+The original tonearm motion rotated away from the record instead of onto it. That was corrected, then replaced with a progress-driven tonearm model.
 
 ### Tonearm realism
 
@@ -316,37 +351,25 @@ Interpolation is linear from `audio.currentTime / audio.duration`.
 
 ### Waveform scrubbing
 
-Waveform seeking was tightened so the scrubber uses the rendered waveform bounds and updates progress immediately after a seek, rather than waiting for the next audio time event.
+Waveform seeking was tightened so the scrubber uses the rendered waveform bounds and updates progress immediately after a seek.
 
-### Why pivot storage at all?
+## Recent Updates
 
-The main reason is not that Supabase is the wrong tool overall. The issue is that this specific app mixes:
-- small structured devotional records
-- comparatively large audio assets
-
-Those two concerns age differently. Metadata is cheap and query-oriented. Audio is bandwidth and storage heavy. Splitting them is the more durable architecture once the archive starts growing.
-
-## Recent Updates Made
-
-Recent work on this repo included:
-
-- fixed first-load archive rendering so songs appear without visiting the admin screen
-- added a Netlify function proxy for archive reads
-- fixed the tonearm moving in the wrong direction
-- replaced fixed tonearm states with progress-based inward tracking
-- narrowed tonearm sweep to a more realistic `9deg -> 36deg`
-- lengthened the tonearm so the stylus reaches further across the record
+- migrated hosting/runtime direction from Netlify to Cloudflare Pages
+- replaced Netlify-specific helper endpoints with Cloudflare Pages Functions
+- moved MP3 upload/delete handling to Cloudflare-native R2 bindings
+- kept Supabase for metadata and artwork storage
+- fixed first-load archive rendering
+- fixed tonearm direction and moved to progress-driven tracking
+- narrowed tonearm sweep to `9deg -> 36deg`
+- lengthened the tonearm
 - fixed waveform scrubbing behavior
-- added volume control with mute/unmute and live percentage readout
-- improved header and archive UI hierarchy
-- changed the brand lockup text to `SELAH`
-- removed the top-right tagline from the header
-- removed the `WAVEFORM SEEK` label while keeping the helper text
+- added volume control
+- updated branding to `SELAH`
+- simplified the waveform header
 - changed the left transport control to `-15 REWIND`
-- tightened spacing between song date, title, and key/scripture in both the hero player and archive list
-- implemented direct-to-R2 signed MP3 uploads through Netlify functions
-- implemented R2 cleanup for MP3 deletes
-- documented the storage pivot and the hybrid Supabase + R2 architecture
+- tightened spacing between song date, title, and key/scripture
+- documented the Cloudflare architecture and the AWS alternative
 
 ## Current UX Features
 
@@ -361,25 +384,22 @@ Recent work on this repo included:
 - archive summary and selected-song context
 - admin gate for upload flow
 - delete controls visible only in admin mode
-- direct-to-R2 audio upload path for new songs
 
 ## Operational Notes
 
-- `netlify.toml` disables aggressive HTML caching so archive and UI updates show up faster after deploy
-- the admin password is stored client-side in `index.html`, which is acceptable only for a lightweight personal project, not for a hardened production admin system
-- the Netlify archive function currently contains Supabase values inline; if this grows beyond a personal project, move those to Netlify environment variables
-- the MP3 path now depends on R2-related Netlify environment variables being set correctly
-- if the R2 signing flow is unavailable, the frontend falls back to Supabase audio storage rather than blocking uploads entirely
+- this app still stores the admin password client-side in `index.html`
+- Supabase anon credentials are still used client-side
+- Cloudflare bindings/secrets should be configured in the Pages dashboard
+- if Cloudflare upload/delete endpoints are unavailable, audio upload/delete falls back to Supabase storage paths where possible
 
-## If You Want To Extend It
+## Next Steps
 
-Practical next steps:
-- keep `audio_url` in Supabase as the pointer to the stored MP3
-- decide whether artwork should remain in Supabase or move to R2 after audio is stable
-- move Supabase credentials for the function into Netlify environment variables
-- replace client-side admin password gating with a real auth flow
-- split `index.html` into smaller modules once change velocity makes single-file editing too costly
-- add tests around archive loading and playback-state sync if the project grows
+Practical next improvements:
+- move remaining hardcoded Supabase config out of the frontend
+- decide whether artwork should also move from Supabase Storage to R2
+- replace client-side admin password gating with real auth
+- split `index.html` into smaller modules if the project grows
+- add end-to-end tests for archive load, upload, playback, and delete flows
 
 ## License
 
