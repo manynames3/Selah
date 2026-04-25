@@ -503,6 +503,8 @@ const ADMIN_PASSWORD = 'grace2024';
 const BUCKET_AUDIO   = 'devotional-audio';
 const BUCKET_ART     = 'devotional-art';
 const DEVOTIONALS_REST_URL = SUPABASE_URL + '/rest/v1/devotionals?select=*&order=entry_date.desc&apikey=' + encodeURIComponent(SUPABASE_ANON);
+const R2_PRESIGN_UPLOAD_URL = '/.netlify/functions/r2-presign-upload';
+const R2_DELETE_OBJECT_URL = '/.netlify/functions/r2-delete-object';
 
 // ── STATE ──
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -653,6 +655,70 @@ function renderWaveform(entry) {
 function updateWaveform(pct) {
   var r = document.getElementById('wClipRect');
   if (r) r.setAttribute('width', (pct*waveformW).toFixed(2));
+}
+function canUseServerFunctions() {
+  return /^https?:$/.test(location.protocol);
+}
+function extractSupabasePublicObjectKey(publicUrl, bucket) {
+  var prefix = SUPABASE_URL + '/storage/v1/object/public/' + bucket + '/';
+  if (!publicUrl || publicUrl.indexOf(prefix) !== 0) return null;
+  return decodeURIComponent(publicUrl.slice(prefix.length).split('?')[0]);
+}
+async function readJsonResponse(res) {
+  var text = await res.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch(e) { return {message:text}; }
+}
+async function requestFunctionJson(url, body) {
+  var res = await fetch(url, {
+    method: 'POST',
+    headers: {'content-type':'application/json'},
+    body: JSON.stringify(body || {})
+  });
+  var data = await readJsonResponse(res);
+  if (!res.ok) throw new Error(data.error || data.message || ('request-' + res.status));
+  return data;
+}
+async function uploadAudioFile(audioFile, entryDate, statusEl) {
+  if (audioFile && canUseServerFunctions()) {
+    try {
+      statusEl.textContent = 'Preparing audio upload…';
+      var signed = await requestFunctionJson(R2_PRESIGN_UPLOAD_URL, {
+        filename: audioFile.name,
+        contentType: audioFile.type || 'audio/mpeg',
+        entryDate: entryDate
+      });
+      statusEl.textContent = 'Uploading audio…';
+      var putRes = await fetch(signed.uploadUrl, {
+        method: 'PUT',
+        headers: {'content-type': signed.contentType || audioFile.type || 'application/octet-stream'},
+        body: audioFile
+      });
+      if (!putRes.ok) throw new Error('r2-upload-' + putRes.status);
+      return signed.publicUrl;
+    } catch (err) {
+      console.warn('R2 audio upload failed, falling back to Supabase storage:', err.message);
+    }
+  }
+  statusEl.textContent = 'Uploading audio…';
+  var ext = audioFile.name.split('.').pop();
+  var path = entryDate + '-' + Date.now() + '.' + ext;
+  var res = await sb.storage.from(BUCKET_AUDIO).upload(path, audioFile, {upsert:true});
+  if (res.error) throw res.error;
+  return sb.storage.from(BUCKET_AUDIO).getPublicUrl(path).data.publicUrl;
+}
+async function deleteAudioFile(audioUrl) {
+  if (!audioUrl) return;
+  if (canUseServerFunctions()) {
+    try {
+      await requestFunctionJson(R2_DELETE_OBJECT_URL, {url: audioUrl});
+      return;
+    } catch (err) {
+      console.warn('R2 audio delete failed, falling back to Supabase storage:', err.message);
+    }
+  }
+  var audioKey = extractSupabasePublicObjectKey(audioUrl, BUCKET_AUDIO);
+  if (audioKey) await sb.storage.from(BUCKET_AUDIO).remove([audioKey]);
 }
 function updateTonearm(progress, hasTrack) {
   var arm = document.getElementById('tonearmArm');
@@ -993,8 +1059,9 @@ async function executeDelete() {
   var entry = entries.find(function(x){ return x.id===pendingDeleteId; });
   await sb.from('devotionals').delete().eq('id', pendingDeleteId);
   if (entry) {
-    if (entry.audio_url) await sb.storage.from(BUCKET_AUDIO).remove([entry.audio_url.split('/').pop()]);
-    if (entry.art_url)   await sb.storage.from(BUCKET_ART).remove([entry.art_url.split('/').pop()]);
+    if (entry.audio_url) await deleteAudioFile(entry.audio_url);
+    var artKey = extractSupabasePublicObjectKey(entry.art_url, BUCKET_ART);
+    if (artKey) await sb.storage.from(BUCKET_ART).remove([artKey]);
   }
   closeDeleteModal(); toast('Deleted');
   if (current && current.id===pendingDeleteId) {
@@ -1080,11 +1147,13 @@ async function handleUpload() {
   btn.disabled=true;
   var audio_url=null, art_url=null;
   if (audioFile) {
-    status.textContent='Uploading audio…';
-    var ext=audioFile.name.split('.').pop(), path=date+'-'+Date.now()+'.'+ext;
-    var res=await sb.storage.from(BUCKET_AUDIO).upload(path, audioFile, {upsert:true});
-    if (res.error) { toast('Audio upload failed'); btn.disabled=false; status.textContent=''; return; }
-    audio_url = sb.storage.from(BUCKET_AUDIO).getPublicUrl(path).data.publicUrl;
+    try {
+      audio_url = await uploadAudioFile(audioFile, date, status);
+    } catch (err) {
+      console.error(err);
+      toast('Audio upload failed');
+      btn.disabled=false; status.textContent=''; return;
+    }
   }
   // upload extracted artwork if found
   if (extractedArtBlob) {
