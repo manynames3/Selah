@@ -147,13 +147,9 @@ alter table devotionals enable row level security;
 
 create policy "Public read" on devotionals
 for select using (true);
-
-create policy "Anon insert" on devotionals
-for insert with check (true);
-
-create policy "Anon delete" on devotionals
-for delete using (true);
 ```
+
+Admin writes now go through Cloudflare Pages Functions with the Supabase service role. The browser should not have direct `anon` insert/delete access to the `devotionals` table anymore.
 
 Supabase Storage bucket still used for artwork:
 - `devotional-art`
@@ -169,19 +165,44 @@ Current MP3 upload flow:
 
 1. user selects an audio file
 2. frontend posts the file to Cloudflare Pages Function `/api/upload-audio`
-3. the function writes the object into R2 through a native bucket binding
-4. the function returns the public MP3 URL
-5. frontend stores that URL in Supabase as `audio_url`
+3. the function verifies the admin session cookie
+4. the function writes the object into R2 through a native bucket binding
+5. if R2 is not enabled yet, it can fall back to Supabase Storage server-side
+6. the function returns the public MP3 URL
+7. frontend sends the final devotional row to `/api/admin-entry-create`
 
 ### Artwork
 
 Current artwork flow:
 
 1. artwork is extracted client-side from MP3 metadata using `jsmediatags`
-2. extracted art is uploaded to Supabase Storage
-3. artwork URL is stored in Supabase as `art_url`
+2. extracted art is uploaded to Cloudflare Pages Function `/api/upload-art`
+3. the function verifies the admin session cookie
+4. the function uploads the image to Supabase Storage using the service role
+5. frontend sends the returned `art_url` to `/api/admin-entry-create`
 
-This keeps the heaviest storage class, audio, on R2 while avoiding an unnecessary second migration for artwork.
+This keeps the heaviest storage class, audio, on R2 while keeping artwork in Supabase without exposing admin credentials in the browser.
+
+## Admin Security
+
+The admin password is no longer stored in `index.html`.
+
+Current admin flow:
+
+1. browser posts the password to `/api/admin-login`
+2. the Pages Function compares it against the encrypted Cloudflare secret `ADMIN_PASSWORD`
+3. on success, the function sets an `HttpOnly` admin session cookie
+4. admin-only routes verify that cookie before allowing upload or delete actions
+
+Admin routes:
+- `/api/admin-login`
+- `/api/admin-logout`
+- `/api/admin-session`
+- `/api/admin-entry-create`
+- `/api/admin-entry-delete`
+- `/api/upload-audio`
+- `/api/upload-art`
+- `/api/delete-audio`
 
 ## Archive Loading
 
@@ -199,9 +220,16 @@ That fallback chain exists because browser-only first-load archive loading was i
 
 Create a Supabase project and set up:
 - the `devotionals` table
-- public read / anon insert / anon delete policies
+- public read policy
 - storage bucket for artwork:
   - `devotional-art`
+- optional legacy/fallback storage bucket for audio:
+  - `devotional-audio`
+
+For security, this app now expects:
+- public `select` on `devotionals`
+- no direct browser `insert` or `delete` on `devotionals`
+- server-side writes through the Cloudflare Function layer using the service role
 
 ### 2. Configure the frontend
 
@@ -210,8 +238,9 @@ Open `index.html` and update the config block:
 ```js
 const SUPABASE_URL = 'YOUR_SUPABASE_URL';
 const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY';
-const ADMIN_PASSWORD = 'your-password';
 ```
+
+The admin password is intentionally not configured in the frontend anymore.
 
 ### 3. Configure Cloudflare R2
 
@@ -234,13 +263,25 @@ Set these in your Cloudflare Pages project:
 ```text
 SUPABASE_URL
 SUPABASE_ANON
+SUPABASE_SERVICE_ROLE
+ADMIN_PASSWORD
+ADMIN_SESSION_SECRET
 AUDIO_PUBLIC_BASE_URL
 AUDIO_KEY_PREFIX
+SUPABASE_ART_BUCKET
+SUPABASE_AUDIO_BUCKET
+SUPABASE_ART_KEY_PREFIX
 ```
 
 Notes:
+- `SUPABASE_SERVICE_ROLE` is required for server-side insert/delete and artwork upload
+- `ADMIN_PASSWORD` is the real admin password and should be stored as an encrypted secret
+- `ADMIN_SESSION_SECRET` signs the admin session cookie and should be different from the password
 - `AUDIO_PUBLIC_BASE_URL` should be the public URL used for MP3 playback
 - `AUDIO_KEY_PREFIX` is optional, for example `audio`
+- `SUPABASE_ART_BUCKET` defaults to `devotional-art`
+- `SUPABASE_AUDIO_BUCKET` defaults to `devotional-audio`
+- `SUPABASE_ART_KEY_PREFIX` defaults to `art`
 - bind `AUDIO_BUCKET` as an R2 bucket binding in Pages
 
 ### 5. Configure `wrangler.jsonc`
@@ -278,7 +319,13 @@ Static frontend:
 
 Pages Functions:
 - `/api/devotionals`
+- `/api/admin-login`
+- `/api/admin-logout`
+- `/api/admin-session`
+- `/api/admin-entry-create`
+- `/api/admin-entry-delete`
 - `/api/upload-audio`
+- `/api/upload-art`
 - `/api/delete-audio`
 
 ## Thought Process
@@ -370,6 +417,8 @@ Waveform seeking was tightened so the scrubber uses the rendered waveform bounds
 - changed the left transport control to `-15 REWIND`
 - tightened spacing between song date, title, and key/scripture
 - documented the Cloudflare architecture and the AWS alternative
+- replaced the client-side admin password check with Cloudflare secret-backed session auth
+- moved devotional create/delete and artwork upload behind protected Pages Functions
 
 ## Current UX Features
 
@@ -387,17 +436,17 @@ Waveform seeking was tightened so the scrubber uses the rendered waveform bounds
 
 ## Operational Notes
 
-- this app still stores the admin password client-side in `index.html`
-- Supabase anon credentials are still used client-side
+- the admin password now lives in Cloudflare Secrets, not in the frontend bundle
+- Supabase anon credentials are still used client-side for public reads only
 - Cloudflare bindings/secrets should be configured in the Pages dashboard
-- if Cloudflare upload/delete endpoints are unavailable, audio upload/delete falls back to Supabase storage paths where possible
+- admin writes now depend on Cloudflare secrets and session cookies
+- if R2 is not enabled yet, `/api/upload-audio` can fall back to Supabase audio storage server-side
 
 ## Next Steps
 
 Practical next improvements:
 - move remaining hardcoded Supabase config out of the frontend
 - decide whether artwork should also move from Supabase Storage to R2
-- replace client-side admin password gating with real auth
 - split `index.html` into smaller modules if the project grows
 - add end-to-end tests for archive load, upload, playback, and delete flows
 

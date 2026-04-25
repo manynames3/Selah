@@ -1,40 +1,39 @@
-function extractObjectKeyFromPublicUrl(publicBaseUrl, objectUrl) {
-  const base = String(publicBaseUrl || "").replace(/\/+$/, "");
-  const url = String(objectUrl || "");
-  if (!base || !url || !url.startsWith(base + "/")) return null;
-  return url
-    .slice(base.length + 1)
-    .split("?")[0]
-    .split("/")
-    .map(decodeURIComponent)
-    .join("/");
-}
+import { requireAdmin, jsonResponse } from "./_auth.js";
+import { extractR2ObjectKeyFromPublicUrl } from "./_media.js";
+import { deletePublicObjects, extractPublicObjectKey, getAudioBucketName } from "./_supabase.js";
 
 export async function onRequestPost(context) {
+  const denied = await requireAdmin(context);
+  if (denied) return denied;
+
   const bucket = context.env.AUDIO_BUCKET;
   const publicBaseUrl = context.env.AUDIO_PUBLIC_BASE_URL;
-
-  if (!bucket || !publicBaseUrl) {
-    return Response.json({ error: "missing-r2-binding" }, { status: 500 });
-  }
+  const audioBucket = getAudioBucketName(context.env);
 
   let payload;
   try {
     payload = await context.request.json();
   } catch {
-    return Response.json({ error: "invalid-json" }, { status: 400 });
-  }
-
-  const objectKey = extractObjectKeyFromPublicUrl(publicBaseUrl, payload && payload.url);
-  if (!objectKey) {
-    return Response.json({ error: "invalid-public-url" }, { status: 400 });
+    return jsonResponse({ error: "invalid-json" }, { status: 400 });
   }
 
   try {
-    await bucket.delete(objectKey);
-    return Response.json({ deleted: true, objectKey });
+    const audioUrl = payload && payload.url;
+    const r2Key = extractR2ObjectKeyFromPublicUrl(publicBaseUrl, audioUrl);
+    if (bucket && r2Key) {
+      await bucket.delete(r2Key);
+      return jsonResponse({ deleted: true, objectKey: r2Key });
+    }
+
+    const supabaseKey = extractPublicObjectKey(context.env, audioBucket, audioUrl);
+    if (supabaseKey) {
+      await deletePublicObjects(context.env, audioBucket, [supabaseKey]);
+      return jsonResponse({ deleted: true, objectKey: supabaseKey });
+    }
+
+    return jsonResponse({ error: "invalid-public-url" }, { status: 400 });
   } catch (error) {
-    return Response.json(
+    return jsonResponse(
       { error: "audio-delete-failed", message: String(error && error.message || error) },
       { status: 500 }
     );

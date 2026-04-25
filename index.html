@@ -499,13 +499,18 @@ body.admin-mode .a-delete{display:flex;}
 // ── CONFIG ──
 const SUPABASE_URL   = 'https://owgryjlboefkchgibrqm.supabase.co';
 const SUPABASE_ANON  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93Z3J5amxib2Vma2NoZ2licnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MjE3MjAsImV4cCI6MjA5MTQ5NzcyMH0.DO5WtuShQ2YpPF4ZzHZ9y3wcbd4XKHBH390v9hEtMYM';
-const ADMIN_PASSWORD = 'grace2024';
 const BUCKET_AUDIO   = 'devotional-audio';
 const BUCKET_ART     = 'devotional-art';
 const DEVOTIONALS_REST_URL = SUPABASE_URL + '/rest/v1/devotionals?select=*&order=entry_date.desc&apikey=' + encodeURIComponent(SUPABASE_ANON);
 const ARCHIVE_FUNCTION_URL = '/api/devotionals';
+const ADMIN_LOGIN_URL = '/api/admin-login';
+const ADMIN_LOGOUT_URL = '/api/admin-logout';
+const ADMIN_SESSION_URL = '/api/admin-session';
 const AUDIO_UPLOAD_URL = '/api/upload-audio';
+const ART_UPLOAD_URL = '/api/upload-art';
 const AUDIO_DELETE_URL = '/api/delete-audio';
+const ENTRY_CREATE_URL = '/api/admin-entry-create';
+const ENTRY_DELETE_URL = '/api/admin-entry-delete';
 
 // ── STATE ──
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -528,6 +533,7 @@ audio.volume = previousVolume;
 updateAdminCta();
 updateArchiveMeta();
 syncVolumeUI();
+syncAdminSession();
 loadEntries();
 
 // ── TIME OF DAY ──
@@ -680,45 +686,76 @@ async function requestJson(url, body) {
   if (!res.ok) throw new Error(data.error || data.message || ('request-' + res.status));
   return data;
 }
-async function uploadAudioFile(audioFile, entryDate, statusEl) {
-  if (audioFile && canUseServerFunctions()) {
-    try {
-      statusEl.textContent = 'Uploading audio…';
-      var uploadRes = await fetch(AUDIO_UPLOAD_URL + '?entryDate=' + encodeURIComponent(entryDate || '') + '&filename=' + encodeURIComponent(audioFile.name || 'track.mp3'), {
-        method: 'POST',
-        headers: {
-          'content-type': audioFile.type || 'application/octet-stream',
-          'x-entry-date': entryDate || '',
-          'x-file-name': audioFile.name || 'track.mp3'
-        },
-        body: audioFile
-      });
-      var uploaded = await readJsonResponse(uploadRes);
-      if (!uploadRes.ok) throw new Error(uploaded.error || uploaded.message || ('upload-' + uploadRes.status));
-      return uploaded.publicUrl;
-    } catch (err) {
-      console.warn('Cloudflare audio upload failed, falling back to Supabase storage:', err.message);
-    }
+function setAdminMode(next) {
+  isAdmin = !!next;
+  document.body.classList.toggle('admin-mode', isAdmin);
+  document.getElementById('adminBadge').classList.toggle('show', isAdmin);
+  updateAdminCta();
+}
+async function syncAdminSession() {
+  if (!canUseServerFunctions()) return;
+  try {
+    var res = await fetch(ADMIN_SESSION_URL, {cache:'no-store'});
+    var data = await readJsonResponse(res);
+    setAdminMode(!!(res.ok && data.authenticated));
+  } catch (err) {
+    setAdminMode(false);
   }
+}
+function handleAdminUnauthorized() {
+  setAdminMode(false);
+  showView('admin-gate');
+  toast('Admin session expired');
+}
+async function uploadAudioFile(audioFile, entryDate, statusEl) {
+  if (!audioFile || !canUseServerFunctions()) throw new Error('server-functions-unavailable');
   statusEl.textContent = 'Uploading audio…';
-  var ext = audioFile.name.split('.').pop();
-  var path = entryDate + '-' + Date.now() + '.' + ext;
-  var res = await sb.storage.from(BUCKET_AUDIO).upload(path, audioFile, {upsert:true});
-  if (res.error) throw res.error;
-  return sb.storage.from(BUCKET_AUDIO).getPublicUrl(path).data.publicUrl;
+  var uploadRes = await fetch(AUDIO_UPLOAD_URL + '?entryDate=' + encodeURIComponent(entryDate || '') + '&filename=' + encodeURIComponent(audioFile.name || 'track.mp3'), {
+    method: 'POST',
+    headers: {
+      'content-type': audioFile.type || 'application/octet-stream',
+      'x-entry-date': entryDate || '',
+      'x-file-name': audioFile.name || 'track.mp3'
+    },
+    body: audioFile
+  });
+  var uploaded = await readJsonResponse(uploadRes);
+  if (uploadRes.status === 401) {
+    handleAdminUnauthorized();
+  }
+  if (!uploadRes.ok) throw new Error(uploaded.error || uploaded.message || ('upload-' + uploadRes.status));
+  return uploaded.publicUrl;
+}
+async function uploadArtFile(artBlob, entryDate, statusEl) {
+  if (!artBlob || !canUseServerFunctions()) throw new Error('server-functions-unavailable');
+  statusEl.textContent = 'Uploading artwork…';
+  var extension = (artBlob.type || 'image/jpeg').split('/').pop() || 'jpg';
+  var artName = 'cover.' + extension;
+  var uploadRes = await fetch(ART_UPLOAD_URL + '?entryDate=' + encodeURIComponent(entryDate || '') + '&filename=' + encodeURIComponent(artName), {
+    method: 'POST',
+    headers: {
+      'content-type': artBlob.type || 'image/jpeg',
+      'x-entry-date': entryDate || '',
+      'x-file-name': artName
+    },
+    body: artBlob
+  });
+  var uploaded = await readJsonResponse(uploadRes);
+  if (uploadRes.status === 401) {
+    handleAdminUnauthorized();
+  }
+  if (!uploadRes.ok) throw new Error(uploaded.error || uploaded.message || ('upload-' + uploadRes.status));
+  return uploaded.publicUrl;
 }
 async function deleteAudioFile(audioUrl) {
   if (!audioUrl) return;
-  if (canUseServerFunctions()) {
-    try {
-      await requestJson(AUDIO_DELETE_URL, {url: audioUrl});
-      return;
-    } catch (err) {
-      console.warn('Cloudflare audio delete failed, falling back to Supabase storage:', err.message);
-    }
+  if (!canUseServerFunctions()) throw new Error('server-functions-unavailable');
+  try {
+    await requestJson(AUDIO_DELETE_URL, {url: audioUrl});
+  } catch (err) {
+    if (String(err.message || '').indexOf('unauthorized') > -1) handleAdminUnauthorized();
+    throw err;
   }
-  var audioKey = extractSupabasePublicObjectKey(audioUrl, BUCKET_AUDIO);
-  if (audioKey) await sb.storage.from(BUCKET_AUDIO).remove([audioKey]);
 }
 function updateTonearm(progress, hasTrack) {
   var arm = document.getElementById('tonearmArm');
@@ -1016,13 +1053,23 @@ function closeModal() { document.getElementById('modalBg').classList.remove('ope
 function closeModalBg(e) { if(e.target===document.getElementById('modalBg')) closeModal(); }
 
 // ── ADMIN ──
-function checkGate() {
-  if (document.getElementById('gatePw').value === ADMIN_PASSWORD) {
-    isAdmin=true; document.body.classList.add('admin-mode');
-    document.getElementById('adminBadge').classList.add('show');
-    updateAdminCta();
-    showView('admin-upload'); toast('Welcome ✦');
-  } else toast('Incorrect password');
+async function checkGate() {
+  var input = document.getElementById('gatePw');
+  var button = document.querySelector('#view-admin-gate .submit-btn');
+  var password = input.value;
+  if (!password) { toast('Enter password'); return; }
+  button.disabled = true;
+  try {
+    await requestJson(ADMIN_LOGIN_URL, {password: password});
+    input.value = '';
+    setAdminMode(true);
+    showView('admin-upload');
+    toast('Welcome ✦');
+  } catch (err) {
+    toast(err.message === 'invalid-password' ? 'Incorrect password' : 'Admin login failed');
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // ── DELETE ──
@@ -1056,28 +1103,29 @@ async function executeDelete() {
   if (!pendingDeleteId) return;
   var btn = document.querySelector('#delRow2 .del-confirm');
   btn.textContent='Deleting…'; btn.disabled=true;
-  var entry = entries.find(function(x){ return x.id===pendingDeleteId; });
-  await sb.from('devotionals').delete().eq('id', pendingDeleteId);
-  if (entry) {
-    if (entry.audio_url) await deleteAudioFile(entry.audio_url);
-    var artKey = extractSupabasePublicObjectKey(entry.art_url, BUCKET_ART);
-    if (artKey) await sb.storage.from(BUCKET_ART).remove([artKey]);
+  try {
+    await requestJson(ENTRY_DELETE_URL, {id: pendingDeleteId});
+    closeDeleteModal(); toast('Deleted');
+    if (current && current.id===pendingDeleteId) {
+      audio.pause(); audio.removeAttribute('src'); audio.load(); current=null;
+      document.getElementById('pEyebrow').textContent='Select a recording below';
+      document.getElementById('pTitle').innerHTML='Songs from the <em>Secret Place</em>';
+      document.getElementById('pScripture').textContent='One song. One scripture. Every day.';
+      document.getElementById('artImg').style.display='none';
+      document.getElementById('artPh').style.display='flex';
+      document.getElementById('waveformContainer').innerHTML='';
+      document.getElementById('tNow').textContent='0:00';
+      document.getElementById('tTot').textContent='0:00';
+      updateArchiveMeta();
+      syncPlaybackUI();
+    }
+    await loadEntries();
+  } catch (err) {
+    if (String(err.message || '').indexOf('unauthorized') > -1) handleAdminUnauthorized();
+    toast('Delete failed');
+  } finally {
+    btn.textContent='Delete Forever'; btn.disabled=false;
   }
-  closeDeleteModal(); toast('Deleted');
-  if (current && current.id===pendingDeleteId) {
-    audio.pause(); audio.removeAttribute('src'); audio.load(); current=null;
-    document.getElementById('pEyebrow').textContent='Select a recording below';
-    document.getElementById('pTitle').innerHTML='Songs from the <em>Secret Place</em>';
-    document.getElementById('pScripture').textContent='One song. One scripture. Every day.';
-    document.getElementById('artImg').style.display='none';
-    document.getElementById('artPh').style.display='flex';
-    document.getElementById('waveformContainer').innerHTML='';
-    document.getElementById('tNow').textContent='0:00';
-    document.getElementById('tTot').textContent='0:00';
-    updateArchiveMeta();
-    syncPlaybackUI();
-  }
-  await loadEntries();
 }
 
 // ── UPLOAD ──
@@ -1146,28 +1194,23 @@ async function handleUpload() {
   var btn=document.getElementById('submitBtn'), status=document.getElementById('upStatus');
   btn.disabled=true;
   var audio_url=null, art_url=null;
-  if (audioFile) {
-    try {
-      audio_url = await uploadAudioFile(audioFile, date, status);
-    } catch (err) {
-      console.error(err);
-      toast('Audio upload failed');
-      btn.disabled=false; status.textContent=''; return;
-    }
-  }
-  // upload extracted artwork if found
-  if (extractedArtBlob) {
-    status.textContent='Uploading artwork…';
-    var artPath = date+'-art-'+Date.now()+'.jpg';
-    var res2 = await sb.storage.from(BUCKET_ART).upload(artPath, extractedArtBlob, {upsert:true, contentType:'image/jpeg'});
-    if (!res2.error) art_url = sb.storage.from(BUCKET_ART).getPublicUrl(artPath).data.publicUrl;
-  }
-  status.textContent='Saving…';
-  var res3=await sb.from('devotionals').insert({title,entry_date:date,scripture,lyrics,audio_url,art_url});
-  if (res3.error) { toast('Save failed'); console.error(res3.error); }
-  else {
+  try {
+    if (audioFile) audio_url = await uploadAudioFile(audioFile, date, status);
+    if (extractedArtBlob) art_url = await uploadArtFile(extractedArtBlob, date, status);
+    status.textContent='Saving…';
+    await requestJson(ENTRY_CREATE_URL, {
+      title: title,
+      entry_date: date,
+      scripture: scripture,
+      lyrics: lyrics,
+      audio_url: audio_url,
+      art_url: art_url
+    });
     toast('Published ✦');
-    ['uTitle','uScripture','uLyrics'].forEach(function(id){ document.getElementById(id).value=''; });
+    ['uTitle','uScripture','uLyrics','gatePw'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.value='';
+    });
     document.getElementById('uAudio').value='';
     document.getElementById('uDate').valueAsDate=new Date();
     document.getElementById('audioDrop')._selectedFile = null;
@@ -1175,9 +1218,15 @@ async function handleUpload() {
     document.getElementById('audioFilename').classList.remove('show');
     document.getElementById('extractedArtWrap').classList.remove('show');
     extractedArtBlob = null;
-    await loadEntries(); showView('archive');
+    await loadEntries();
+    showView('archive');
+  } catch (err) {
+    console.error(err);
+    if (String(err.message || '').indexOf('unauthorized') > -1) handleAdminUnauthorized();
+    toast('Save failed');
+  } finally {
+    btn.disabled=false; status.textContent='';
   }
-  btn.disabled=false; status.textContent='';
 }
 
 // ── TOAST ──
