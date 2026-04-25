@@ -756,9 +756,7 @@ async function uploadAudioFile(audioFile, entryDate, statusEl) {
   var uploadRes = await fetch(AUDIO_UPLOAD_URL + '?entryDate=' + encodeURIComponent(entryDate || '') + '&filename=' + encodeURIComponent(audioFile.name || 'track.mp3'), {
     method: 'POST',
     headers: {
-      'content-type': audioFile.type || 'application/octet-stream',
-      'x-entry-date': entryDate || '',
-      'x-file-name': audioFile.name || 'track.mp3'
+      'content-type': audioFile.type || 'application/octet-stream'
     },
     body: audioFile
   });
@@ -777,9 +775,7 @@ async function uploadArtFile(artBlob, entryDate, statusEl) {
   var uploadRes = await fetch(ART_UPLOAD_URL + '?entryDate=' + encodeURIComponent(entryDate || '') + '&filename=' + encodeURIComponent(artName), {
     method: 'POST',
     headers: {
-      'content-type': artBlob.type || 'image/jpeg',
-      'x-entry-date': entryDate || '',
-      'x-file-name': artName
+      'content-type': artBlob.type || 'image/jpeg'
     },
     body: artBlob
   });

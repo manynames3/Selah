@@ -6,8 +6,9 @@ export async function onRequestPost(context) {
   const denied = await requireAdmin(context);
   if (denied) return denied;
 
-  const filename = context.request.headers.get("x-file-name") || "art.jpg";
-  const entryDate = context.request.headers.get("x-entry-date") || "";
+  const url = new URL(context.request.url);
+  const filename = context.request.headers.get("x-file-name") || url.searchParams.get("filename") || "art.jpg";
+  const entryDate = context.request.headers.get("x-entry-date") || url.searchParams.get("entryDate") || "";
   const contentType = context.request.headers.get("content-type") || "image/jpeg";
   if (!context.request.body) {
     return jsonResponse({ error: "missing-upload-body" }, { status: 400 });
